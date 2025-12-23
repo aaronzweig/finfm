@@ -1,0 +1,6 @@
+wandb/
+.ipynb_checkpoints
+conditional-flow-matching/
+data/
+__pycache__
+.run
