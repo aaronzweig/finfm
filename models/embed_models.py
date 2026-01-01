@@ -53,27 +53,23 @@ class EmbedNetTrainBase(ModelBase):
 
         device = self.get_device()
 
-        x0, x1, t0, t1, c = batch
+        x0, x1, t0, t1 = batch
         x0.to(device)
         x1.to(device)
         t0.to(device)
         t1.to(device)
-        c.to(device)
         
-        return x0, x1, t0, t1, c
+        return x0, x1, t0, t1
 
     def _compute_loss(self, batch):
-        x0, x1, t0, t1, cond = self._prepare_batch(batch)
+        x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
         loss = 0
 
         for i in range(x0.shape[0]):
-            c = cond[i].unsqueeze(0).repeat(x0[i].shape[0], 1)
-
             t, xt, dxt, xt_free, dxt_free, df_xt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], 
                                                                                                           t0[i], t1[i],
-                                                                                                          c, 
                                                                                                           ot_sample=self.config.ot_in_embed)
             
             norm_diff = torch.abs(torch.norm(df_xt, dim=-1)**2 - self.squared_g_norm(dxt_free, xt_free))
@@ -91,14 +87,13 @@ class EmbedNetTrainBase(ModelBase):
         old_sigma = self.flow_matcher.sigma
         self.flow_matcher.sigma = 0
 
-        x0, x1, t0, t1, cond = self._prepare_batch(batch)
+        x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
 
         paths = []
         
         i = 0
-        c = cond[i].unsqueeze(0).repeat(x0[i].shape[0], 1)
         x0_, x1_ = x0[i], x1[i]
 
         x0_ /= self.sample_rescale
@@ -111,7 +106,7 @@ class EmbedNetTrainBase(ModelBase):
             t = torch.tensor(j)
             t = t.unsqueeze(0).repeat(x0[i].shape[0])
             t.requires_grad_(True)
-            _, xt, _, _, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], c, 
+            _, xt, _, _, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
                                                                                     t=t, ot_sample=False)
             paths.append(xt.detach() * self.sample_rescale)
 

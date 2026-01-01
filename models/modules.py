@@ -10,7 +10,6 @@ class SinNet(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        cond_dim: int,
         output_dim: int,
         num_freq: int,
         activation: str = "selu",
@@ -21,7 +20,7 @@ class SinNet(nn.Module):
         super().__init__()
         
         self.num_freq = num_freq
-        self.model = SimpleDenseNet(input_dim=input_dim + cond_dim + 2 * num_freq,
+        self.model = SimpleDenseNet(input_dim=input_dim + 2 * num_freq,
                                     output_dim=output_dim,
                                     activation=activation,
                                     layer_norm=layer_norm,
@@ -43,9 +42,9 @@ class SinNet(nn.Module):
         scaled_t = t * freqs
         return torch.cat([torch.cos(scaled_t), torch.sin(scaled_t)], dim=-1)
     
-    def forward(self, x, c, t):
+    def forward(self, x, t):
         t = self.sinusoidal_time_encoding(t)
-        return self.rescale * self.model(torch.cat([x, c, t], dim = 1))
+        return self.rescale * self.model(torch.cat([x, t], dim = 1))
 
     
 #https://github.com/kksniak/metric-flow-matching/blob/main/mfm/networks/mlp_base.py

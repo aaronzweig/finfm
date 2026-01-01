@@ -22,17 +22,13 @@ import random
 
 
 class WrappedVectorField(torch.nn.Module):
-    def __init__(self, model, c, w=1.0):
+    def __init__(self, model):
         super().__init__()
         self.model = model
-        self.c = c
-        self.w = w
 
     def forward(self, t, x, *args, **kwargs):
         t = t.repeat(x.shape[0])
-        v_cond = self.model(x, self.c, t)
-        v_ctrl = self.model(x, torch.zeros_like(self.c), t)
-        return self.w * v_cond + (1-self.w) * v_ctrl
+        return = self.model(x, t)
 
 # From https://github.com/kksniak/metric-flow-matching/blob/main/mfm/flow_matchers/flow_net_train.py
 class FlowNetTrainBase(ModelBase):
@@ -59,8 +55,8 @@ class FlowNetTrainBase(ModelBase):
     def normalize_time(self, t):
         return (t - self.t_global_min) / (self.t_global_max - self.t_global_min)
     
-    def forward(self, x, c, t):
-        return self.flow_net(x, c, t)
+    def forward(self, x, t):
+        return self.flow_net(x, t)
 
     def _prepare_batch(self, batch):
 
@@ -71,13 +67,12 @@ class FlowNetTrainBase(ModelBase):
         x1.to(device)
         t0.to(device)
         t1.to(device)
-        c.to(device)
         
-        return x0, x1, t0, t1, c
+        return x0, x1, t0, t1
 
     def _compute_loss(self, batch):
 
-        x0, x1, t0, t1, cond = self._prepare_batch(batch)
+        x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
 
@@ -85,18 +80,14 @@ class FlowNetTrainBase(ModelBase):
 
         for i in range(x0.shape[0]):
         
-            t, xt, ut = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])
-
-            c = cond[i].unsqueeze(0).repeat(x0[i].shape[0], 1)
-    
-            device = self.get_device()
-            vt = self(xt, c, t)
+            t, xt, ut = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])    
+            vt = self(xt, t)
     
             loss += torch.mean((vt - ut) ** 2)
 
         return loss / x0.shape[0]
 
-    def sample_traj(self, x, c, t0, t1, num_samples, steps=2000):
+    def sample_traj(self, x, t0, t1, num_samples, steps=2000):
 
         device = self.get_device()
 
@@ -105,7 +96,7 @@ class FlowNetTrainBase(ModelBase):
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
     
-        node = NeuralODE(WrappedVectorField(self.flow_net, c), solver="dopri5", sensitivity="adjoint")
+        node = NeuralODE(WrappedVectorField(self.flow_net), solver="dopri5", sensitivity="adjoint")
         indices = np.random.choice(x.shape[0], num_samples, replace=False)
         indices = torch.from_numpy(indices).to(device)
         with torch.no_grad():
@@ -116,12 +107,12 @@ class FlowNetTrainBase(ModelBase):
 
         return traj * self.sample_rescale.unsqueeze(0).to(device)
 
-    def sample(self, x, c, t0, t1, num_samples, steps=2000):
-        traj = self.sample_traj(x, c, t0, t1, num_samples, steps)
+    def sample(self, x, t0, t1, num_samples, steps=2000):
+        traj = self.sample_traj(x, t0, t1, num_samples, steps)
         return traj[-1]
 
-    def sample_and_weight(self, x, c, t0, t1, num_samples, steps=2000):
-        samples = self.sample(x, c, t0, t1, num_samples, steps)
+    def sample_and_weight(self, x, t0, t1, num_samples, steps=2000):
+        samples = self.sample(x, t0, t1, num_samples, steps)
         return samples, None
 
 
@@ -241,18 +232,16 @@ class MetricFlowNetTrainBase(FlowNetTrainBase):
 
     def _compute_loss(self, batch):
 
-        x0, x1, t0, t1, cond = self._prepare_batch(batch)
+        x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
         loss = 0
 
         for i in range(x0.shape[0]):
             
-            c = cond[i].unsqueeze(0).repeat(x0[i].shape[0], 1)
-            t, xt, dxt, _, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i], c)
+            t, xt, dxt, _, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])
             
-            device = self.get_device()
-            vt = self(xt.detach(), c, t) #TODO: the main inefficiency, we should only do forward once outside the loop
+            vt = self(xt.detach(), t) #TODO: the main inefficiency, we should only do forward once outside the loop
     
             loss += torch.mean((vt - dxt.detach()) ** 2)
 

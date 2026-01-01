@@ -145,11 +145,11 @@ class MetricFlowMatcher(OTFlowMatcher):
     def d_gamma(self, t, t_min, t_max):
         return 2 * (-2 * t + t_max + t_min) / (t_max - t_min) ** 2
 
-    def compute_mu_t(self, x0, x1, t, t_min, t_max, c):
+    def compute_mu_t(self, x0, x1, t, t_min, t_max):
 
         t = pad_t_like_x(t, x0)
         
-        self.geo_net_output = self.geo_net(torch.cat([x0, x1], dim=-1), c, t)
+        self.geo_net_output = self.geo_net(torch.cat([x0, x1], dim=-1), t)
         
         return (
             (t_max - t) / (t_max - t_min) * x0
@@ -158,32 +158,21 @@ class MetricFlowMatcher(OTFlowMatcher):
         )
 
     #TODO: this is a mess of recomputing things, to be cleaned up
-    def compute_df_dt(self, x0, x1, t, epsilon, t_min, t_max, c):
+    def compute_df_dt(self, x0, x1, t, epsilon, t_min, t_max):
 
-        # def f_wrt_time(t_scalar, x0_row, x1_row, ep_row, c_row):
-        #     t_scalar = t_scalar.unsqueeze(0)
-        #     x0_row = x0_row.unsqueeze(0)
-        #     x1_row = x1_row.unsqueeze(0)
-        #     ep_row = ep_row.unsqueeze(0)
-        #     c_row = c_row.unsqueeze(0)
-        #     xt = self.sample_xt(x0_row, x1_row, t_scalar, ep_row, t_min, t_max, c_row)
-        #     return self.embed_net(xt).squeeze(0)
-            
-        # return vmap(jacrev(f_wrt_time))(t.squeeze(-1), x0, x1, epsilon, c)
-
-        return self.df_dt_fun(self.embed_net, self.sample_xt, x0, x1, t, epsilon, t_min, t_max, c)
+        return self.df_dt_fun(self.embed_net, self.sample_xt, x0, x1, t, epsilon, t_min, t_max)
 
     @staticmethod
-    def df_dt_fun(model, xt_func, x0, x1, t_raw, epsilon, t_min, t_max, c):
+    def df_dt_fun(model, xt_func, x0, x1, t_raw, epsilon, t_min, t_max):
         def f(tt):
-            xt = xt_func(x0, x1, tt, epsilon, t_min, t_max, c)
+            xt = xt_func(x0, x1, tt, epsilon, t_min, t_max)
             return model(xt)
 
         _, dydt = jvp(f, (t_raw,), (torch.ones_like(t_raw),))
         return dydt.squeeze(-1)    
     
-    def sample_xt(self, x0, x1, t, epsilon, t_min, t_max, c):
-        mu_t = self.compute_mu_t(x0, x1, t, t_min, t_max, c)
+    def sample_xt(self, x0, x1, t, epsilon, t_min, t_max):
+        mu_t = self.compute_mu_t(x0, x1, t, t_min, t_max)
         sigma_t = self.compute_sigma_t(t)
         sigma_t = pad_t_like_x(sigma_t, x0)
         return mu_t + sigma_t * epsilon
@@ -204,7 +193,6 @@ class MetricFlowMatcher(OTFlowMatcher):
         x1,
         t_min,
         t_max,
-        c,
         t=None,
         ot_sample=True
     ):
@@ -218,27 +206,18 @@ class MetricFlowMatcher(OTFlowMatcher):
             x0, x1 = self.ot_sample(x0, x1)
 
         eps = self.sample_noise_like(x0)
-        xt = self.sample_xt(x0, x1, t, eps, t_min, t_max, c)
-        ut = self.compute_conditional_flow(x0, x1, t, xt, t_min, t_max, c)
+        xt = self.sample_xt(x0, x1, t, eps, t_min, t_max)
+        ut = self.compute_conditional_flow(x0, x1, t, xt, t_min, t_max)
         with frozen_params(self.geo_net):
-            xt_free = self.sample_xt(x0, x1, t, eps, t_min, t_max, c)
-            ut_free = self.compute_conditional_flow(x0, x1, t, xt, t_min, t_max, c)
-            df_dt = self.compute_df_dt(x0, x1, t, eps, t_min, t_max, c)
+            xt_free = self.sample_xt(x0, x1, t, eps, t_min, t_max)
+            ut_free = self.compute_conditional_flow(x0, x1, t, xt, t_min, t_max)
+            df_dt = self.compute_df_dt(x0, x1, t, eps, t_min, t_max)
 
         return t, xt, ut, xt_free, ut_free, df_dt
 
-    def compute_conditional_flow(self, x0, x1, t, xt, t_min, t_max, c):
+    def compute_conditional_flow(self, x0, x1, t, xt, t_min, t_max):
         del xt
         t = pad_t_like_x(t, x0)
-
-        # def phi_wrt_time(t_scalar, x_row, c_row):
-        #     t_scalar = t_scalar.unsqueeze(0)
-        #     x_row = x_row.unsqueeze(0)
-        #     c_row = c_row.unsqueeze(0)
-        #     return self.geo_net(x_row, c_row, t_scalar).squeeze(0)
-        
-        # x0_x1 = torch.cat([x0, x1], dim=-1)
-        # self.doutput_dt = vmap(jacrev(phi_wrt_time))(t.squeeze(-1), x0_x1, c)
 
         self.doutput_dt = self.doutput_dt_fun(self.geo_net, x0, x1, c, t)
         
@@ -249,11 +228,11 @@ class MetricFlowMatcher(OTFlowMatcher):
         )
 
     @staticmethod
-    def doutput_dt_fun(model, x0, x1, c, t_raw):
+    def doutput_dt_fun(model, x0, x1, t_raw):
         x0_x1 = torch.cat([x0, x1], dim=-1)
         def f(tt):
             t_padded = pad_t_like_x(tt, x0_x1)        
-            return model(x0_x1, c, t_padded)
+            return model(x0_x1, t_padded)
 
         _, dydt = jvp(f, (t_raw,), (torch.ones_like(t_raw),))
         return dydt.squeeze(-1)      

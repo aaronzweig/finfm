@@ -17,11 +17,9 @@ from losses.losses import *
 class ModelBase(pl.LightningModule):
     def __init__(
         self,
-        conditions=None,
         config=None,
     ):
         super().__init__()
-        self.conditions = conditions
         self.config = config
         self.lr = config.lr
         self.warmup_steps = config.warmup_steps
@@ -29,7 +27,7 @@ class ModelBase(pl.LightningModule):
     def get_device(self):
         pass
 
-    def forward(self, x, c, t):
+    def forward(self, x, t):
         pass
 
     def _compute_loss(self, batch):
