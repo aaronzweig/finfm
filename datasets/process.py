@@ -2,6 +2,7 @@ import os
 import scanpy as sc
 import torch
 from datasets.dataset import *
+from utils.preprocess import *
 
 
 
@@ -40,46 +41,25 @@ def process_data(pc_dim = None, data="zebrafish"):
 
     return adata, values
 
-def get_condition_vector(adata, value, default='ctrl-inj'):
-    dim = adata.varm['PCs'].shape[1]
-    names = adata.var_names.tolist()
-    
-    if value == default:
-        return torch.zeros(dim,)
-    #PC loadings are useless, use random embeddings
-    z = torch.randn(dim,)
-    return z / torch.linalg.norm(z)
-    
-
-def extract_dataset(adata, values, default='ctrl-inj', use_rep='X_pca'):
-
-    conditions = {value: get_condition_vector(adata, value, default) for value in values}
+def extract_paired_dataset(adata, use_rep='X_pca'):
     
     dataset = []
-    for gene_target in values:
-        z = adata[adata.obs['gene_target'] == gene_target]
-        seen_timepoints = sorted(z.obs['timepoint'].unique().tolist())
-        for i in range(len(seen_timepoints)-1):
-            t0 = seen_timepoints[i]
-            t1 = seen_timepoints[i+1]
-            adata0 = z[z.obs['timepoint'] == t0]
-            adata1 = z[z.obs['timepoint'] == t1]
-            X0 = torch.from_numpy(adata0.obsm[use_rep]).float()
-            X1 = torch.from_numpy(adata1.obsm[use_rep]).float()
-            obj = (X0, X1, t0, t1, gene_target)
-            dataset.append(obj)
+    seen_timepoints = sorted(adata.obs['timepoint'].unique().tolist())
+    for i in range(len(seen_timepoints)-1):
+        t0 = seen_timepoints[i]
+        t1 = seen_timepoints[i+1]
+        adata0 = adata[adata.obs['timepoint'] == t0]
+        adata1 = adata[adata.obs['timepoint'] == t1]
+        X0 = torch.from_numpy(adata0.obsm[use_rep]).float()
+        X1 = torch.from_numpy(adata1.obsm[use_rep]).float()
+        obj = (X0, X1, t0, t1)
+        dataset.append(obj)
 
-    return conditions, dataset
+    return dataset
 
-def extract_score_dataset(adata, values, default='ctrl-inj', use_rep='X_pca', n_neighbors=10, resolution=0.1):
+def extract_singleton_dataset(adata, use_rep='X_pca'):
 
-    conditions = {value: get_condition_vector(adata, value, default) for value in values}
-
-    adata_train = adata[adata.obs['gene_target'].isin(values)]
-    dataset = torch.from_numpy(adata_train.obsm[use_rep]).float()
-
-    sc.pp.neighbors(adata_train, n_neighbors=n_neighbors, use_rep=use_rep)
-    sc.tl.leiden(adata_train, resolution=resolution)
-    
-    return conditions, dataset, torch.from_numpy(np.array(adata_train.obs['leiden'].astype(int).tolist()))
+    dataset = torch.from_numpy(adata.obsm[use_rep]).float()
+    y = torch.from_numpy(adata.obs['cell_type_one_hot'].to_numpy()).long()
+    return dataset, y
 

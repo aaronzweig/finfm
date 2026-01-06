@@ -1,13 +1,5 @@
-import os
 import torch
-import torch.nn.functional as F
-import wandb
 import numpy as np
-import matplotlib.pyplot as plt
-import pytorch_lightning as pl
-from torch.optim import AdamW
-from torch.func import jvp, vmap, jacrev
-from torchmetrics.functional import mean_squared_error
 
 from .base_model import *
 from utils.frozen import *
@@ -25,26 +17,20 @@ class EmbedNetTrainBase(ModelBase):
         *args,
         **kwargs,
     ):
-
-        freeze_params(metric_model)
         
         super().__init__(*args, **kwargs)
-        self.flow_matcher = flow_matcher
+        self.flow_matcher = flow_matcher #TODO: define the flow matcher inside of here
         self.embed_net = embed_net
         self.geo_net = geo_net
         self.metric_model = metric_model
         self.t_global_min = t_global_min
         self.t_global_max = t_global_max
 
-        self.sample_rescale = sample_rescale
+        self.sample_rescale = sample_rescale.float()
 
-    def squared_g_norm(self, x, x_g):
-        G = self.metric_model(x_g)
-        x *= self.sample_rescale.to(self.get_device())
-        return torch.norm(x, dim = -1)**2 * G
-
-    def get_device(self):
-        return next(self.embed_net.parameters()).device
+    def F(self, x, v):
+        x = x * self.sample_rescale.to(self.get_device())
+        return self.metric_model(x, v)
 
     def normalize_time(self, t):
         return (t - self.t_global_min) / (self.t_global_max - self.t_global_min)
@@ -72,11 +58,11 @@ class EmbedNetTrainBase(ModelBase):
                                                                                                           t0[i], t1[i],
                                                                                                           ot_sample=self.config.ot_in_embed)
             
-            norm_diff = torch.abs(torch.norm(df_xt, dim=-1)**2 - self.squared_g_norm(dxt_free, xt_free))
+            #TODO: include random velocity sampling
+            norm_diff = torch.abs(torch.norm(df_xt, dim=-1) - self.F(xt_free, dxt_free))
             loss += torch.mean(norm_diff)
 
-            loss += 0.5 * torch.mean(self.squared_g_norm(dxt, xt))
-
+            loss += 0.5 * torch.mean(self.F(xt, dxt) ** 2)
 
         loss /= torch.max(self.sample_rescale) ** 2
             

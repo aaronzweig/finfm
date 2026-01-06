@@ -5,7 +5,7 @@ import anndata as ad
 import os
 import pandas as pd
 
-def import_zebra_data():
+def import_zebrafish_data():
     
     path = "/home/azweig/projects/zebrafish/data"
     mtx_suffix = "zscape_perturb_full_raw_counts.mtx"

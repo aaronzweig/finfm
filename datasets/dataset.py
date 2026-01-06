@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import Dataset, Sampler, DataLoader, TensorDataset
 import pytorch_lightning as pl
 import random
-#from utils.ot import *
+from utils.ot import *
 
 class Config(dict):
     def __getattr__(self, item):
@@ -33,37 +33,35 @@ def sample(X, batch_size):
 
 
 class ShufflingDataset(Dataset):
-    def __init__(self, obj_list, batch_size, conditions):
+    def __init__(self, obj_list, batch_size):
 
         self.obj_list = obj_list
         self.batch_size = batch_size
-        self.conditions = conditions
 
     def __getitem__(self, index):
         obj = self.obj_list[index]
-        X0, X1, t0, t1, gene_target = obj
+        X0, X1, t0, t1 = obj
 
         x0 = sample(X0, self.batch_size)
         x1 = sample(X1, self.batch_size)
         
-        return x0, x1, torch.tensor(t0), torch.tensor(t1), self.conditions[gene_target]
+        return x0, x1, torch.tensor(t0), torch.tensor(t1)
 
     def __len__(self):
         return len(self.obj_list)
 
 
 class ShufflingOTDataset(Dataset):
-    def __init__(self, obj_list, batch_size, conditions, update_epoch_rate = 50):
+    def __init__(self, obj_list, batch_size, update_epoch_rate = 50):
 
         self.obj_list = obj_list
         self.batch_size = batch_size
-        self.conditions = conditions
         self.update_epoch_rate = update_epoch_rate
-        self.ot_list = None
+        self.ot_list = []
 
     def __getitem__(self, index):
         obj = self.ot_list[index]
-        X, Y, t0, t1, gene_target = obj
+        X, Y, t0, t1 = obj
 
         replace = self.batch_size > X.shape[0]
         indices = np.random.choice(X.shape[0], self.batch_size, replace=replace)
@@ -72,7 +70,7 @@ class ShufflingOTDataset(Dataset):
         x = X[indices]
         y = Y[indices]
         
-        return x, y, torch.tensor(t0), torch.tensor(t1), self.conditions[gene_target]
+        return x, y, torch.tensor(t0), torch.tensor(t1)
 
     def __len__(self):
         return len(self.obj_list)
@@ -117,9 +115,8 @@ class ShufflingOTDataset(Dataset):
     def recompute_ot_samples(self, embed_net):
         self.ot_list = []
         for obj in self.obj_list:
-            X, Y, t0, t1, gene_target = obj
+            X, Y, t0, t1 = obj
             X_emb, Y_emb = self.embed(X, Y, embed_net)
             i, j = sample_from_coupling(X_emb, Y_emb, n_samples=X.shape[0]+Y.shape[0], indices=True)
-            self.ot_list.append((X[i], Y[j], t0, t1, gene_target))
-            
-        
+            self.ot_list.append((X[i], Y[j], t0, t1))
+

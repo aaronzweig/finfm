@@ -10,14 +10,13 @@ from torchmetrics.functional import mean_squared_error
 from torchdyn.core import NeuralODE
 from torchvision import transforms
 
-from torchcfm.conditional_flow_matching import *
+# from torchcfm.conditional_flow_matching import *
 from torchcfm.models import MLP
 from torchcfm.utils import plot_trajectories, torch_wrapper
 
 from .base_model import *
 from torchdyn.core import NeuralODE
 
-from losses.losses import *
 import random
 
 
@@ -28,7 +27,7 @@ class WrappedVectorField(torch.nn.Module):
 
     def forward(self, t, x, *args, **kwargs):
         t = t.repeat(x.shape[0])
-        return = self.model(x, t)
+        return self.model(x, t)
 
 # From https://github.com/kksniak/metric-flow-matching/blob/main/mfm/flow_matchers/flow_net_train.py
 class FlowNetTrainBase(ModelBase):
@@ -48,10 +47,7 @@ class FlowNetTrainBase(ModelBase):
         self.t_global_max = t_global_max
         
         self.sample_rescale = sample_rescale
-
-    def get_device(self):
-        return next(self.flow_net.parameters()).device
-
+        
     def normalize_time(self, t):
         return (t - self.t_global_min) / (self.t_global_max - self.t_global_min)
     
@@ -62,7 +58,7 @@ class FlowNetTrainBase(ModelBase):
 
         device = self.get_device()
 
-        x0, x1, t0, t1, c = batch
+        x0, x1, t0, t1 = batch
         x0.to(device)
         x1.to(device)
         t0.to(device)

@@ -1,15 +1,8 @@
-import math
-import warnings
-from typing import Union
-
 import numpy as np
 import torch
-import os
-import sys
-sys.path.append(os.path.abspath("conditional-flow-matching"))
 from torchcfm.optimal_transport import OTPlanSampler
 from torchcfm.conditional_flow_matching import pad_t_like_x, ConditionalFlowMatcher
-from torch.func import jvp, vmap, jacrev
+from torch.func import jvp
 from utils.frozen import *
 
 ############################################################################################################################
@@ -170,12 +163,6 @@ class MetricFlowMatcher(OTFlowMatcher):
 
         _, dydt = jvp(f, (t_raw,), (torch.ones_like(t_raw),))
         return dydt.squeeze(-1)    
-    
-    def sample_xt(self, x0, x1, t, epsilon, t_min, t_max):
-        mu_t = self.compute_mu_t(x0, x1, t, t_min, t_max)
-        sigma_t = self.compute_sigma_t(t)
-        sigma_t = pad_t_like_x(sigma_t, x0)
-        return mu_t + sigma_t * epsilon
 
     def ot_sample(self, x0, x1):
         if self.no_ot:
@@ -219,7 +206,7 @@ class MetricFlowMatcher(OTFlowMatcher):
         del xt
         t = pad_t_like_x(t, x0)
 
-        self.doutput_dt = self.doutput_dt_fun(self.geo_net, x0, x1, c, t)
+        self.doutput_dt = self.doutput_dt_fun(self.geo_net, x0, x1, t)
         
         return (
             (x1 - x0) / (t_max - t_min)

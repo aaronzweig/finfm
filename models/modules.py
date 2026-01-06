@@ -14,7 +14,7 @@ class SinNet(nn.Module):
         num_freq: int,
         activation: str = "selu",
         layer_norm: bool = False,
-        hidden_dims: List[int] = None,
+        hidden_dims: List[int] = [],
         rescale: float = 1.0,
     ):
         super().__init__()
@@ -87,7 +87,7 @@ class SimpleEmbedNet(nn.Module):
         sample_rescale,
         activation: str = "selu",
         layer_norm: bool = False,
-        hidden_dims: List[int] = None,
+        hidden_dims: List[int] = [],
         rescale: float = 1.0,
         skip: bool = False,
     ):
@@ -117,7 +117,7 @@ class SimpleEmbedNet(nn.Module):
         return skip_embed + self.rescale * self.model(x)
         
 
-class SimpleScoreNet(nn.Module):
+class SimpleResNet(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -148,7 +148,7 @@ class SimpleDenseNet(nn.Module):
         output_dim: int,
         activation: str = "selu",
         layer_norm: bool = False,
-        hidden_dims: List[int] = None,
+        hidden_dims: List[int] = [],
     ):
         super().__init__()
         dims = [input_dim, *hidden_dims, output_dim]

@@ -8,16 +8,13 @@ from torchmetrics.functional import mean_squared_error
 from torchdyn.core import NeuralODE
 from torchvision import transforms
 
-from torchcfm.conditional_flow_matching import *
 from torchcfm.models import MLP
 from torchcfm.utils import plot_trajectories, torch_wrapper
-
-from losses.losses import *
 
 class ModelBase(pl.LightningModule):
     def __init__(
         self,
-        config=None,
+        config,
     ):
         super().__init__()
         self.config = config
@@ -25,7 +22,7 @@ class ModelBase(pl.LightningModule):
         self.warmup_steps = config.warmup_steps
 
     def get_device(self):
-        pass
+        return self.device
 
     def forward(self, x, t):
         pass
