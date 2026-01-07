@@ -28,6 +28,34 @@ def sample_s(size, d):
     
     return x, y, t, tree
 
+def sample_omega(size, d):
+    sizes = [size//6] * 6
+    sigma = 0.05
+
+    x0 = np.zeros((sizes[0], d))
+    x0[:,0] = np.random.uniform(0, 2, size=sizes[0])
+    x0[:,1] = -1.0
+    x0 += sigma * np.random.normal(size=(sizes[0], d))
+    x1 = sample_quarter(sizes[1], (3, [0,0]), d=d)
+    x2 = sample_quarter(sizes[2], (0, [0,0]), d=d)
+    x3 = sample_quarter(sizes[3], (1, [0,0]), d=d)
+    x4 = sample_quarter(sizes[4], (2, [0,0]), d=d)
+    x5 = np.zeros((sizes[5], d))
+    x5[:,0] = np.random.uniform(-2, 0, size=sizes[5])
+    x5[:,1] = -1.0
+    x5 += sigma * np.random.normal(size=(sizes[5], d))
+
+    x = np.concatenate([x0, x1, x2, x3, x4, x5], axis = 0)
+    y = np.repeat([0,1,2,3,4,5], size//6)
+    t = np.repeat([0,0,0,1,1,1], size//6)
+    tree = np.zeros((6,6))
+    tree[0,1] = 1
+    tree[1,2] = 1
+    tree[2,3] = 1
+    tree[3,4] = 1
+    tree[4,5] = 1
+    return x, y, t, tree
+
 def sample_points(size, d):
     sizes = [size//3] * 3
 

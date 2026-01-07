@@ -1,13 +1,18 @@
 import torch
+import torch.nn as nn
+
 import numpy as np
 
 from .base_model import *
 from utils.frozen import *
+from models.cfm import *
+import torch.nn.functional as F
+from torch.func import jvp
+
 
 class EmbedNetTrainBase(ModelBase):
     def __init__(
         self,
-        flow_matcher,
         embed_net,
         metric_model,
         geo_net,
@@ -19,7 +24,6 @@ class EmbedNetTrainBase(ModelBase):
     ):
         
         super().__init__(*args, **kwargs)
-        self.flow_matcher = flow_matcher #TODO: define the flow matcher inside of here
         self.embed_net = embed_net
         self.geo_net = geo_net
         self.metric_model = metric_model
@@ -27,6 +31,22 @@ class EmbedNetTrainBase(ModelBase):
         self.t_global_max = t_global_max
 
         self.sample_rescale = sample_rescale.float()
+
+        self.flow_matcher = MetricFlowMatcher(sigma=self.config.sigma,
+                                              geo_fn = self.geo_fn,
+                                              embed_fn = self.embed_fn,
+                                              cost_matrix_fn = self.cost_matrix_fn,
+                                              no_ot = self.config.fast_ot,
+                                              )
+
+    def embed_fn(self, x):
+            return self.embed_net(x)
+    
+    def geo_fn(self, x0, x1, t):
+        return self.geo_net(torch.cat([x0, x1], dim=-1), t)
+    
+    def cost_matrix_fn(self, x0, x1):
+            return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
 
     def F(self, x, v):
         x = x * self.sample_rescale.to(self.get_device())
@@ -54,10 +74,11 @@ class EmbedNetTrainBase(ModelBase):
         loss = 0
 
         for i in range(x0.shape[0]):
-            t, xt, dxt, xt_free, dxt_free, df_xt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], 
-                                                                                                          t0[i], t1[i],
-                                                                                                          ot_sample=self.config.ot_in_embed)
-            
+            t, xt, dxt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i],
+                                                                                ot_sample=self.config.ot_in_embed)
+            xt_free, dxt_free = xt.detach(), dxt.detach()
+            df_xt = jvp(self.embed_fn, (xt_free,), (dxt_free,))[1]
+
             #TODO: include random velocity sampling
             norm_diff = torch.abs(torch.norm(df_xt, dim=-1) - self.F(xt_free, dxt_free))
             loss += torch.mean(norm_diff)
@@ -92,10 +113,35 @@ class EmbedNetTrainBase(ModelBase):
             t = torch.tensor(j)
             t = t.unsqueeze(0).repeat(x0[i].shape[0])
             t.requires_grad_(True)
-            _, xt, _, _, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
+            _, xt, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
                                                                                     t=t, ot_sample=False)
             paths.append(xt.detach() * self.sample_rescale)
 
-        
-        self.flow_matcher.sigma = old_sigma        
+        self.flow_matcher.sigma = old_sigma
         return torch.stack(paths, dim = 0)
+    
+
+class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        
+        super().__init__(*args, **kwargs)
+
+        #TODO: order wrong? need beta defined to make embed_fn and then define flow_matcher
+        self.beta = nn.Parameter(torch.randn(self.embed_net.latent_dim//2))
+
+    #TODO: this logic assumes skip = False in the EmbedNet
+    def embed_fn(self, x):
+        z = self.embed_net(x)
+        psi, phi = z[:, :self.beta.shape[0]], z[:, self.beta.shape[0]:]
+        return phi, psi @ self.beta
+    
+    def cost_matrix_fn(self, x0, x1):
+        phi0, psi0 = self.embed_fn(x0)
+        phi1, psi1 = self.embed_fn(x1)
+        M = torch.cdist(phi0, phi1)
+        M += F.relu(psi0.unsqueeze(1) - psi1.unsqueeze(0))
+        return M ** 2

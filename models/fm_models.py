@@ -33,7 +33,7 @@ class WrappedVectorField(torch.nn.Module):
 class FlowNetTrainBase(ModelBase):
     def __init__(
         self,
-        flow_matcher,
+        embed_model,
         flow_net,
         t_global_min,
         t_global_max,
@@ -41,10 +41,11 @@ class FlowNetTrainBase(ModelBase):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.flow_matcher = flow_matcher
+        self.flow_matcher = embed_model.flow_matcher
         self.flow_net = flow_net
         self.t_global_min = t_global_min
         self.t_global_max = t_global_max
+        self.embed_model = embed_model
         
         self.sample_rescale = sample_rescale
         
@@ -71,15 +72,15 @@ class FlowNetTrainBase(ModelBase):
         x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
-
         loss = 0
 
         for i in range(x0.shape[0]):
-        
-            t, xt, ut = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])    
-            vt = self(xt, t)
+
+            t, xt, dxt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i], flow_mode=True)
+
+            vt = self(xt.detach(), t.detach()) #TODO: the main inefficiency, we should only do forward once outside the loop
     
-            loss += torch.mean((vt - ut) ** 2)
+            loss += torch.mean((vt - dxt.detach()) ** 2)
 
         return loss / x0.shape[0]
 
@@ -212,33 +213,3 @@ class FlowNetTrainBase(ModelBase):
 ############################################################################################################################
 #METRIC?
 ############################################################################################################################
-
-class MetricFlowNetTrainBase(FlowNetTrainBase):
-    def __init__(
-        self,
-        geo_net,
-        embed_net,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-        self.geo_net = geo_net
-        self.embed_net = embed_net
-        ### Only have these parameters to load them onto device
-
-    def _compute_loss(self, batch):
-
-        x0, x1, t0, t1 = self._prepare_batch(batch)
-        t0 = self.normalize_time(t0)
-        t1 = self.normalize_time(t1)
-        loss = 0
-
-        for i in range(x0.shape[0]):
-            
-            t, xt, dxt, _, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])
-            
-            vt = self(xt.detach(), t) #TODO: the main inefficiency, we should only do forward once outside the loop
-    
-            loss += torch.mean((vt - dxt.detach()) ** 2)
-
-        return loss / x0.shape[0]
