@@ -116,28 +116,34 @@ class FinslerMetricNet(MetricNetTrainBase):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.T = T
         self.eps = 1e-8
         self.temp = temp
         self.riemannian_metric_model = riemannian_metric_model
         self.classifier_model = classifier_model
+        self.T = T
         
     def _Jf(self, x):
-        return jacrev(self.classifier_model)(x)
+        def classifier_single(sample):
+            logits = self.classifier_model(sample.unsqueeze(0))
+            return logits.squeeze(0)
+
+        return vmap(jacrev(classifier_single))(x)
     
     # temp + softmax
     def M_fisher_rao(self, x):
         p = torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
         diag = 1 / (p + self.eps)
-        return torch.eye(p.shape[-1], device=x.device) * diag[None, :]
+        return torch.diag_embed(diag)
 
     def M_finsler(self, x, v):
-        gx = self.riemannian_metric_model(x)
+        gx = self.riemannian_metric_model(x, v).squeeze(-1)
         v_gx_norm = torch.norm(v, dim=-1) * gx
         Jf_x = self._Jf(x)
-        pre_simplex = (1 - (self.M_fisher_rao(x) + self.T)) @ self.classifier_model(x)
-        on_simplex = Jf_x.transpose(-1, -2) @ pre_simplex[..., None]
-        finsler_term = torch.inner(v, on_simplex.squeeze(-1), dim=-1)
+        logits = self.classifier_model(x)
+        simplex_transform = 1 - (self.M_fisher_rao(x) + self.T)
+        pre_simplex = simplex_transform @ logits.unsqueeze(-1)
+        on_simplex = Jf_x.transpose(-1, -2) @ pre_simplex
+        finsler_term = torch.sum(v * on_simplex.squeeze(-1), dim=-1)
         return v_gx_norm + torch.relu(finsler_term)
     
     def forward(self, x, v):
