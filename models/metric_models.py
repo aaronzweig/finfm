@@ -3,6 +3,7 @@ import numpy as np
 
 from .base_model import *
 from utils.frozen import *
+from torch.func import jvp, vmap, jacrev
 
 class MetricNetTrainBase(ModelBase):
     def __init__(
@@ -108,6 +109,7 @@ class FinslerMetricNet(MetricNetTrainBase):
     def __init__(
         self,
         T,
+        temp,
         riemannian_metric_model,
         classifier_model,
         *args,
@@ -115,8 +117,31 @@ class FinslerMetricNet(MetricNetTrainBase):
     ):
         super().__init__(*args, **kwargs)
         self.T = T
+        self.eps = 1e-8
+        self.temp = temp
         self.riemannian_metric_model = riemannian_metric_model
         self.classifier_model = classifier_model
+        
+    def _Jf(self, x):
+        return jacrev(self.classifier_model)(x)
+    
+    # temp + softmax
+    def M_fisher_rao(self, x):
+        p = torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
+        diag = 1 / (p + self.eps)
+        return torch.eye(p.shape[-1], device=x.device) * diag[None, :]
 
+    def M_finsler(self, x, v):
+        gx = self.riemannian_metric_model(x)
+        v_gx_norm = torch.norm(v, dim=-1) * gx
+        Jf_x = self._Jf(x)
+        pre_simplex = (1 - (self.M_fisher_rao(x) + self.T)) @ self.classifier_model(x)
+        on_simplex = Jf_x.transpose(-1, -2) @ pre_simplex[..., None]
+        finsler_term = torch.inner(v, on_simplex.squeeze(-1), dim=-1)
+        return v_gx_norm + torch.relu(finsler_term)
+    
     def forward(self, x, v):
-        pass #TODO: Implement Finsler metric forward pass
+        return self.M_finsler(x, v)
+        
+        
+        
