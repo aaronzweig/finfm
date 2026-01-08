@@ -124,7 +124,6 @@ class MetricFlowMatcher(OTFlowMatcher):
     def __init__(
         self, 
         geo_fn, 
-        embed_fn, 
         cost_matrix_fn,
         no_ot = False, 
         *args, 
@@ -132,7 +131,6 @@ class MetricFlowMatcher(OTFlowMatcher):
         super().__init__(*args, **kwargs)
         self.ot_sampler = GeneralOTPlanSampler(method="exact", cost_matrix_fn=cost_matrix_fn)
         self.geo_fn = geo_fn
-        self.embed_fn = embed_fn
         self.no_ot = no_ot
 
     def gamma(self, t, t_min, t_max):
@@ -170,7 +168,6 @@ class MetricFlowMatcher(OTFlowMatcher):
         t_max,
         t=None,
         ot_sample=True,
-        flow_mode=False,
     ):
         if t is None:
             t = torch.rand(x0.shape[0], requires_grad=True)
@@ -194,25 +191,3 @@ class MetricFlowMatcher(OTFlowMatcher):
 
         xt, ut = jvp(f, (t,), (torch.ones_like(t),))
         return xt, ut.squeeze(-1)
-
-    # def compute_conditional_flow(self, x0, x1, t, xt, t_min, t_max):
-    #     del xt
-    #     t = pad_t_like_x(t, x0)
-
-    #     self.doutput_dt = self.doutput_dt_fun(self.geo_fn, x0, x1, t)
-        
-    #     return (
-    #         (x1 - x0) / (t_max - t_min)
-    #         + self.d_gamma(t, t_min, t_max) * self.geo_net_output
-    #         + self.gamma(t, t_min, t_max) * self.doutput_dt
-    #     )
-
-    # @staticmethod
-    # def doutput_dt_fun(model, x0, x1, t_raw):
-    #     x0_x1 = torch.cat([x0, x1], dim=-1)
-    #     def f(tt):
-    #         t_padded = pad_t_like_x(tt, x0_x1)        
-    #         return model(x0_x1, t_padded)
-
-    #     _, dydt = jvp(f, (t_raw,), (torch.ones_like(t_raw),))
-    #     return dydt.squeeze(-1)      

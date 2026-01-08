@@ -34,7 +34,6 @@ class EmbedNetTrainBase(ModelBase):
 
         self.flow_matcher = MetricFlowMatcher(sigma=self.config.sigma,
                                               geo_fn = self.geo_fn,
-                                              embed_fn = self.embed_fn,
                                               cost_matrix_fn = self.cost_matrix_fn,
                                               no_ot = self.config.fast_ot,
                                               )
@@ -67,6 +66,15 @@ class EmbedNetTrainBase(ModelBase):
         
         return x0, x1, t0, t1
 
+    def embed_loss(self, x, v):
+        df_x_v = jvp(self.embed_fn, (x,), (v,))[1]
+        norm_diff = torch.abs(torch.norm(df_x_v, dim=-1) - self.F(x, v))
+        loss = torch.mean(norm_diff)
+        return loss
+    
+    def geo_loss(self, x, v):
+        return 0.5 * torch.mean(self.F(x, v) ** 2)
+
     def _compute_loss(self, batch):
         x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
@@ -77,13 +85,14 @@ class EmbedNetTrainBase(ModelBase):
             t, xt, dxt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i],
                                                                                 ot_sample=self.config.ot_in_embed)
             xt_free, dxt_free = xt.detach(), dxt.detach()
-            df_xt = jvp(self.embed_fn, (xt_free,), (dxt_free,))[1]
+            v = torch.randn_like(dxt_free)
+            v /= torch.norm(v, dim=-1, keepdim=True)
 
-            #TODO: include random velocity sampling
-            norm_diff = torch.abs(torch.norm(df_xt, dim=-1) - self.F(xt_free, dxt_free))
-            loss += torch.mean(norm_diff)
-
-            loss += 0.5 * torch.mean(self.F(xt, dxt) ** 2)
+            #TODO: should we normalize dxt_free too?  Morally yes because we're comparing two homogeneous norms
+            #TODO: if we're using a random v, we should use EMA?
+            loss = self.embed_loss(xt_free, dxt_free)
+            # loss += self.embed_loss(xt_free, v)
+            loss += self.geo_loss(xt, dxt)
 
         loss /= torch.max(self.sample_rescale) ** 2
             
@@ -128,20 +137,27 @@ class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
         **kwargs,
     ):
         
+        self.beta = nn.Parameter(torch.randn(self.config.latent_dim//2))
         super().__init__(*args, **kwargs)
 
-        #TODO: order wrong? need beta defined to make embed_fn and then define flow_matcher
-        self.beta = nn.Parameter(torch.randn(self.embed_net.latent_dim//2))
-
-    #TODO: this logic assumes skip = False in the EmbedNet
     def embed_fn(self, x):
-        z = self.embed_net(x)
-        psi, phi = z[:, :self.beta.shape[0]], z[:, self.beta.shape[0]:]
-        return phi, psi @ self.beta
+        return self.embed_net(x)
+        # z = self.embed_net(x)
+        # psi, phi = z[:, :self.beta.shape[0]], z[:, self.beta.shape[0]:]
+        # return phi, psi @ self.beta
     
+    def embed_loss(self, x, v):
+        df_x_v = jvp(self.embed_fn, (x,), (v,))[1]
+        dphi, dpsi = df_x_v[:, self.beta.shape[0]:], df_x_v[:, :self.beta.shape[0]] @ -self.beta
+        norm_diff = torch.abs(torch.norm(dphi, dim=-1) + dpsi - self.F(x, v))
+        loss = torch.mean(norm_diff)
+        return loss
+
     def cost_matrix_fn(self, x0, x1):
-        phi0, psi0 = self.embed_fn(x0)
-        phi1, psi1 = self.embed_fn(x1)
+        z0 = self.embed_fn(x0)
+        z1 = self.embed_fn(x1)
+        phi0, psi0 = z0[:, self.beta.shape[0]:], z0[:, :self.beta.shape[0]] @ self.beta
+        phi1, psi1 = z1[:, self.beta.shape[0]:], z1[:, :self.beta.shape[0]] @ self.beta
         M = torch.cdist(phi0, phi1)
         M += F.relu(psi0.unsqueeze(1) - psi1.unsqueeze(0))
         return M ** 2
