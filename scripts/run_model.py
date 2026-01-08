@@ -18,7 +18,6 @@ from datasets.dataset import *
 from utils.frozen import *
 from utils.callback import *
 from models.modules import *
-from models.cfm import *
 from models.ema import *
 from models.classifier_models import *
 from datasets.process import *
@@ -78,13 +77,19 @@ def build_embed(config, adata, metric_model):
                       hidden_dims=[config.hidden_dim]*config.num_layers,
                       rescale=config.rescale)
 
-    flow_matcher = MetricFlowMatcher(sigma=config.sigma, geo_net = geo_net, embed_net = embed_net, no_ot = config.fast_ot)
-
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     t_global_min, t_global_max = min(timepoints), max(timepoints)
     
-    embed_model = EmbedNetTrainBase(flow_matcher=flow_matcher,
-                                    metric_model=metric_model,
+    if config.use_finsler:
+        embed_model = FinslerEmbedNetTrainBase(metric_model=metric_model,
+                                               geo_net=geo_net,
+                                               embed_net=embed_net,
+                                               config=config,
+                                               t_global_min=t_global_min,
+                                               t_global_max=t_global_max,
+                                               sample_rescale=sample_rescale)
+    else:
+        embed_model = EmbedNetTrainBase(metric_model=metric_model,
                                     geo_net=geo_net,
                                     embed_net=embed_net,
                                     config=config,
@@ -106,10 +111,8 @@ def build_flow(config, adata, embed_model):
     t_global_min, t_global_max = min(timepoints), max(timepoints)
     sample_rescale = torch.from_numpy(adata.uns['std'])
     
-    flow_model = MetricFlowNetTrainBase(flow_matcher=embed_model.flow_matcher,
-                             flow_net=flow_net,
-                             geo_net=embed_model.geo_net,
-                             embed_net=embed_model.embed_net,
+    flow_model = FlowNetTrainBase(flow_net=flow_net,
+                             embed_model=embed_model,
                              config=config,
                              t_global_min=t_global_min,
                              t_global_max=t_global_max,
@@ -183,7 +186,7 @@ def run_full_model(config, project = None, adata = None, dataset = None):
         if phase in ['classifier', 'metric']:
 
             train_dataset = TensorDataset(X, y)
-            train_dataloader = DataLoader(train_dataset, batch_size = config.score_batch_size)
+            train_dataloader = DataLoader(train_dataset, batch_size = config.score_batch_size, drop_last=True, shuffle=True)
 
             if phase == "metric" and config.metric == "mfm":
                 #TODO: hard-coded?
