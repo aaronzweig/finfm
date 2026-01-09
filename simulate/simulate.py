@@ -28,6 +28,20 @@ def sample_s(size, d):
     
     return x, y, t, tree
 
+def sample_s_imbalanced(size, d):
+    sizes = [size//20, size//10, size, size//20, size, size//20]
+    angles = [0, 1, 2, 0, 3, 2]
+    offsets = [[0,1], [0,1], [0,1], [0, -1], [0, -1], [0, -1]]
+    inputs = list(zip(angles, offsets))
+
+    x = np.concatenate([sample_quarter(sizes[i], inputs[i], d=d) for i in range(len(sizes))], axis = 0)
+    y = np.zeros(x.shape[0])
+    t = [[i] * sizes[i] for i in range(len(sizes))]
+    t = np.concatenate(t, axis = 0)
+    tree = np.zeros((1,1))
+    
+    return x, y, t, tree
+
 def sample_omega(size, d):
     sizes = [size//6] * 6
     sigma = 0.05
@@ -75,8 +89,13 @@ def sample_points(size, d):
 
 def sample_diamond(size, d):
 
-    x = 0.2 * np.random.normal(size=(size, d))
-    x0, x1, x2, x3 = tuple(np.array_split(x, indices_or_sections = 4, axis = 0))
+    sizes = [size//4] * 4
+
+    x0 = 0.1 * np.random.normal(size=(sizes[0], d))
+    x1 = 0.1 * np.random.normal(size=(sizes[1], d))
+    x2 = 0.1 * np.random.normal(size=(sizes[2], d))
+    x3 = 0.1 * np.random.normal(size=(sizes[3], d))
+
     x0[:,0] -= 1.0
     x1[:,0] += 1.0
     x2[:,1] -= 1.0
@@ -84,15 +103,15 @@ def sample_diamond(size, d):
     x = np.concatenate([x0, x1, x2, x3], axis=0)
 
     y0 = np.zeros(x0.shape[0])
-    y1 = np.zeros_like(x1.shape[0]) + 1
-    y2 = np.zeros_like(x2.shape[0]) + 2
-    y3 = np.zeros_like(x3.shape[0]) + 3
+    y1 = np.zeros(x1.shape[0]) + 1
+    y2 = np.zeros(x2.shape[0]) + 2
+    y3 = np.zeros(x3.shape[0]) + 3
     y = np.concatenate([y0, y1, y2, y3], axis=0)
 
-    t0 = np.zeros_like(x0.shape[0])
-    t1 = np.zeros_like(x1.shape[0])
-    t2 = np.zeros_like(x2.shape[0]) + 1
-    t3 = np.zeros_like(x3.shape[0]) + 1
+    t0 = np.zeros(x0.shape[0])
+    t1 = np.zeros(x1.shape[0])
+    t2 = np.zeros(x2.shape[0]) + 1
+    t3 = np.zeros(x3.shape[0]) + 1
     t = np.concatenate([t0, t1, t2, t3], axis=0)
 
     tree = np.zeros((4,4))

@@ -47,6 +47,8 @@ class MetricNetMFM(MetricNetTrainBase):
         self,
         K = 20,
         kappa = 1.0,
+        alpha = 1.0,
+        epsilon = 1e-2,
         *args,
         **kwargs,
     ):
@@ -57,8 +59,8 @@ class MetricNetMFM(MetricNetTrainBase):
         self.W = torch.nn.Parameter(torch.rand(self.K, 1))
         self.train_dataloader = None  # Will be set externally before training
 
-        self.alpha = 1.0
-        self.epsilon = 1e-2
+        self.alpha = alpha
+        self.epsilon = epsilon
 
     def M(self, x):
         dist2 = torch.cdist(x, self.C) ** 2
@@ -106,25 +108,28 @@ class MetricNetMFM(MetricNetTrainBase):
         loss = ((1 - self.M(x)) ** 2).mean()
         return loss
 
-class FinslerMetricNet(MetricNetTrainBase):
+
+class FinslerMixin:
     def __init__(
         self,
         tree,
         temp,
-        riemannian_metric_model,
         classifier_model,
+        lamb = 1.0,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.eps = 1e-8
         self.temp = temp
-        self.riemannian_metric_model = riemannian_metric_model
         self.classifier_model = classifier_model
         self.tree = tree
+        self.lamb = lamb
+        self.logit_clamp = 10.0
+
     
     def classifier_fn(self, x):
-        return torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
+        return torch.softmax(torch.clamp(self.classifier_model(x), max=self.logit_clamp) / self.temp, dim=-1)
 
     def fisher_rao(self, x):
         p = self.classifier_fn(x)
@@ -133,12 +138,18 @@ class FinslerMetricNet(MetricNetTrainBase):
     
     #TODO: verify the shapes and implementation makes sense
     def forward(self, x, v):
+        riemann_term = super().forward(x, v)
         f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
 
-        u = 1 - f_x @ (self.tree.T + torch.eye(f_x.shape[-1], device=x.device))
+        u = 1 - f_x @ (self.tree.T.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
 
         finsler_term = torch.sum(Jf_x_v * self.fisher_rao(x) * u, dim=-1)
-        return self.riemannian_metric_model(x, v) + F.relu(finsler_term)
-        
-        
+        return riemann_term + self.lamb * F.relu(finsler_term)
+
+class FinslerCFM(FinslerMixin, MetricNetCFM):
+    pass
+
+class FinslerMFM(FinslerMixin, MetricNetMFM):
+    pass
+
         

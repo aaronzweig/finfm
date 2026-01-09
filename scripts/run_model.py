@@ -25,7 +25,7 @@ from datasets.process import *
 def build_classifier(config):
 
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
-                                     output_dim=config.num_classes + 1,
+                                     output_dim=config.num_classes,
                                      hidden_dims=[config.hidden_dim]*config.num_layers,
                                      layer_norm=True,)
 
@@ -35,26 +35,40 @@ def build_classifier(config):
 def build_metric(config, adata, classifier_model):
 
     if config.metric == "cfm":
-        metric_model = MetricNetCFM(config=config)
+        if not config.use_finsler:
+            metric_model = MetricNetCFM(config=config)
+        else:
+            metric_model = FinslerCFM(config=config,
+                                      classifier_model=classifier_model,
+                                      tree=torch.from_numpy(adata.uns['tree']).float(),
+                                      temp=config.finsler_temp,
+                                      lamb=config.finsler_lamb,
+                                      )
 
     elif config.metric == "mfm":
-        assert config.metric_max_epochs>5, "Need to train the metric tensor when you use MFM"
         #TODO: pass the dataloader?
-        metric_model = MetricNetMFM(K = config.K,
-                                    kappa=config.kappa,
-                                    config=config)
+        if not config.use_finsler:
+            metric_model = MetricNetMFM(K = config.K,
+                                        kappa=config.kappa,
+                                        alpha=config.alpha,
+                                        epsilon=config.epsilon,
+                                        config=config)
+        else:
+            metric_model = FinslerMFM(config=config,
+                                      classifier_model=classifier_model,
+                                      tree=torch.from_numpy(adata.uns['tree']).float(),
+                                      temp=config.finsler_temp,
+                                      lamb=config.finsler_lamb,
+                                      K = config.K,
+                                      kappa=config.kappa,
+                                      alpha=config.alpha,
+                                      epsilon=config.epsilon,
+                                      )
     elif config.metric == "gaga":
         pass
     
     else:
         raise NotImplementedError(f"Metric model {config.metric} not implemented.")
-    
-    if config.use_finsler:
-        metric_model = FinslerMetricNet(riemannian_metric_model=metric_model,
-                                                classifier_model=classifier_model,
-                                                config=config,
-                                                tree=adata.uns['tree'],
-                                                temp=config.finsler_temp)
 
     return metric_model
 
@@ -186,7 +200,10 @@ def run_full_model(config, project = None, adata = None, dataset = None):
         if phase in ['classifier', 'metric']:
 
             train_dataset = TensorDataset(X, y)
-            train_dataloader = DataLoader(train_dataset, batch_size = config.score_batch_size, drop_last=True, shuffle=True)
+            train_dataloader = DataLoader(train_dataset, 
+                                          batch_size = config.score_batch_size, 
+                                          drop_last=True, 
+                                          shuffle=True)
 
             if phase == "metric" and config.metric == "mfm":
                 #TODO: hard-coded?

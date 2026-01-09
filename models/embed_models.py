@@ -79,7 +79,7 @@ class EmbedNetTrainBase(ModelBase):
         x0, x1, t0, t1 = self._prepare_batch(batch)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
-        loss = 0
+        loss_embed, loss_geo = 0, 0
 
         for i in range(x0.shape[0]):
             t, xt, dxt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i],
@@ -89,14 +89,21 @@ class EmbedNetTrainBase(ModelBase):
             v /= torch.norm(v, dim=-1, keepdim=True)
 
             #TODO: should we normalize dxt_free too?  Morally yes because we're comparing two homogeneous norms
-            #TODO: if we're using a random v, we should use EMA?
-            loss = self.embed_loss(xt_free, dxt_free)
-            loss += self.embed_loss(xt_free, v)
-            loss += self.geo_loss(xt, dxt)
+            loss_embed += self.embed_loss(xt_free, dxt_free)
+            loss_embed += self.embed_loss(xt_free, v)
+            loss_geo += self.geo_loss(xt, dxt)
 
-        loss /= torch.max(self.sample_rescale) ** 2
-            
-        return loss / x0.shape[0]
+        loss_embed /= torch.max(self.sample_rescale) ** 2
+        loss_geo /= torch.max(self.sample_rescale) ** 2
+
+        return loss_embed / x0.shape[0], loss_geo / x0.shape[0]
+
+    def training_step(self, batch, batch_idx):
+        loss_embed, loss_geo = self._compute_loss(batch)
+
+        self.log("train_loss_embed", loss_embed)
+        self.log("train_loss_geo", loss_geo)
+        return loss_embed + loss_geo
 
     def sample_geodesic(self, batch, points = 50, ot_sample=True):
 
@@ -137,14 +144,13 @@ class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
         **kwargs,
     ):
         
-        self.beta = nn.Parameter(torch.randn(self.config.latent_dim//2))
         super().__init__(*args, **kwargs)
+        self.beta = nn.Parameter(torch.randn(self.config.latent_dim//2))
 
+
+    #TODO: this really only makes sense if skip = False
     def embed_fn(self, x):
         return self.embed_net(x)
-        # z = self.embed_net(x)
-        # psi, phi = z[:, :self.beta.shape[0]], z[:, self.beta.shape[0]:]
-        # return phi, psi @ self.beta
     
     def embed_loss(self, x, v):
         df_x_v = jvp(self.embed_fn, (x,), (v,))[1]

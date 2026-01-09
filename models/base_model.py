@@ -15,8 +15,10 @@ class ModelBase(pl.LightningModule):
     def __init__(
         self,
         config,
+        *args, 
+        **kwargs
     ):
-        super().__init__()
+        super().__init__(*args, **kwargs)
         self.config = config
         self.lr = config.lr
         self.warmup_steps = config.warmup_steps
