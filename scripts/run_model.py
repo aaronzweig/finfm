@@ -50,11 +50,11 @@ def build_metric(config, adata, classifier_model):
         raise NotImplementedError(f"Metric model {config.metric} not implemented.")
     
     if config.use_finsler:
-        T = adata.uns['tree']
         metric_model = FinslerMetricNet(riemannian_metric_model=metric_model,
                                                 classifier_model=classifier_model,
                                                 config=config,
-                                                T=T)
+                                                tree=adata.uns['tree'],
+                                                temp=config.finsler_temp)
 
     return metric_model
 

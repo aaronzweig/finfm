@@ -91,7 +91,7 @@ class EmbedNetTrainBase(ModelBase):
             #TODO: should we normalize dxt_free too?  Morally yes because we're comparing two homogeneous norms
             #TODO: if we're using a random v, we should use EMA?
             loss = self.embed_loss(xt_free, dxt_free)
-            # loss += self.embed_loss(xt_free, v)
+            loss += self.embed_loss(xt_free, v)
             loss += self.geo_loss(xt, dxt)
 
         loss /= torch.max(self.sample_rescale) ** 2

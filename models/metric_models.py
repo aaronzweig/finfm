@@ -3,7 +3,8 @@ import numpy as np
 
 from .base_model import *
 from utils.frozen import *
-from torch.func import jvp, vmap, jacrev
+import torch.nn.functional as F
+from torch.func import jvp
 
 class MetricNetTrainBase(ModelBase):
     def __init__(
@@ -108,7 +109,7 @@ class MetricNetMFM(MetricNetTrainBase):
 class FinslerMetricNet(MetricNetTrainBase):
     def __init__(
         self,
-        T,
+        tree,
         temp,
         riemannian_metric_model,
         classifier_model,
@@ -120,34 +121,24 @@ class FinslerMetricNet(MetricNetTrainBase):
         self.temp = temp
         self.riemannian_metric_model = riemannian_metric_model
         self.classifier_model = classifier_model
-        self.T = T
-        
-    def _Jf(self, x):
-        def classifier_single(sample):
-            logits = self.classifier_model(sample.unsqueeze(0))
-            return logits.squeeze(0)
-
-        return vmap(jacrev(classifier_single))(x)
+        self.tree = tree
     
-    # temp + softmax
-    def M_fisher_rao(self, x):
-        p = torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
+    def classifier_fn(self, x):
+        return torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
+
+    def fisher_rao(self, x):
+        p = self.classifier_fn(x)
         diag = 1 / (p + self.eps)
-        return torch.diag_embed(diag)
-
-    def M_finsler(self, x, v):
-        gx = self.riemannian_metric_model(x, v).squeeze(-1)
-        v_gx_norm = torch.norm(v, dim=-1) * gx
-        Jf_x = self._Jf(x)
-        logits = self.classifier_model(x)
-        simplex_transform = 1 - (self.M_fisher_rao(x) + self.T)
-        pre_simplex = simplex_transform @ logits.unsqueeze(-1)
-        on_simplex = Jf_x.transpose(-1, -2) @ pre_simplex
-        finsler_term = torch.sum(v * on_simplex.squeeze(-1), dim=-1)
-        return v_gx_norm + torch.relu(finsler_term)
+        return diag
     
+    #TODO: verify the shapes and implementation makes sense
     def forward(self, x, v):
-        return self.M_finsler(x, v)
+        f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
+
+        u = 1 - f_x @ (self.tree.T + torch.eye(f_x.shape[-1], device=x.device))
+
+        finsler_term = torch.sum(Jf_x_v * self.fisher_rao(x) * u, dim=-1)
+        return self.riemannian_metric_model(x, v) + F.relu(finsler_term)
         
         
         
