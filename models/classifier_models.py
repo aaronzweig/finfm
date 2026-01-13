@@ -23,9 +23,8 @@ class ClassifierNetTrainBase(ModelBase):
     ):
         super().__init__(*args, **kwargs)
         self.classifier_net = classifier_net
-        self.use_dummy_class = getattr(self.config, "use_dummy_class", False)
-        self.dummy_prior = getattr(self.config, "dummy_prior", 0.05)
-        self.dummy_kl_weight = getattr(self.config, "dummy_kl_weight", 0.0)
+        self.dummy_prior = self.config.dummy_prior
+        self.dummy_kl_weight = self.config.dummy_kl_weight
 
     def forward(self, x):
         return self.classifier_net(x)
@@ -49,7 +48,7 @@ class ClassifierNetTrainBase(ModelBase):
         if self.dummy_kl_weight > 0:
             num_logits = logits.shape[-1]
             prior = torch.full((num_logits,), 1.0 / num_logits, device=logits.device)
-            if self.use_dummy_class and num_logits > 1:
+            if num_logits > 1:
                 base_prob = (1.0 - self.dummy_prior) / (num_logits - 1)
                 prior.fill_(base_prob)
                 prior[-1] = self.dummy_prior

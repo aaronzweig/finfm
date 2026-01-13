@@ -7,18 +7,6 @@ from torch.utils.data import DataLoader, TensorDataset
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 
-# Ensure local packages (datasets/utils/models) are importable when the project
-# root is not already on sys.path.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-# If a global `datasets` package (e.g., Hugging Face) was imported earlier,
-# drop it so imports below use the local project module instead.
-if 'datasets' in sys.modules:
-    mod_path = getattr(sys.modules['datasets'], '__file__', '') or ''
-    if str(PROJECT_ROOT) not in mod_path:
-        sys.modules.pop('datasets')
-
 from torch.utils.data import Dataset, Sampler, DataLoader
 import pytorch_lightning as pl
 import torch
@@ -38,11 +26,9 @@ from datasets.process import *
 from omegaconf import OmegaConf
     
 def build_classifier(config):
-    num_classes = config.num_classes + (1 if config.use_dummy_class else 0)
-
     print("### DEBUG: classifier is constrained to linear ###")
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
-                                     output_dim=config.num_classes,
+                                     output_dim=config.num_classes+1,
                                      hidden_dims=[config.hidden_dim]*config.num_layers,
                                      layer_norm=True,
                                      activation="identity")

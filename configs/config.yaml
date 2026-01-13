@@ -34,6 +34,10 @@ force_cpu: False
 detect_anomaly: False
 use_wandb: False,
 
+# Classifier settings
+dummy_prior: 0.05
+dummy_kl_weight: 0.05
+
 # Metric / Flow settings
 metric: "cfm"
 sigma: 0.01
