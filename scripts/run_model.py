@@ -21,6 +21,7 @@ from models.modules import *
 from models.ema import *
 from models.classifier_models import *
 from datasets.process import *
+from omegaconf import OmegaConf
     
 def build_classifier(config):
 
@@ -35,34 +36,34 @@ def build_classifier(config):
 def build_metric(config, adata, classifier_model):
 
     if config.metric == "cfm":
-        if not config.use_finsler:
+        if not config.finsler.use:
             metric_model = MetricNetCFM(config=config)
         else:
             metric_model = FinslerCFM(config=config,
                                       classifier_model=classifier_model,
                                       tree=torch.from_numpy(adata.uns['tree']).float(),
-                                      temp=config.finsler_temp,
-                                      lamb=config.finsler_lamb,
+                                      temp=config.finsler.temp,
+                                      lamb=config.finsler.lamb,
                                       )
 
     elif config.metric == "mfm":
         #TODO: pass the dataloader?
-        if not config.use_finsler:
-            metric_model = MetricNetMFM(K = config.K,
-                                        kappa=config.kappa,
-                                        alpha=config.alpha,
-                                        epsilon=config.epsilon,
+        if not config.finsler.use:
+            metric_model = MetricNetMFM(K = config.mfm.K,
+                                        kappa=config.mfm.kappa,
+                                        alpha=config.mfm.alpha,
+                                        epsilon=config.mfm.epsilon,
                                         config=config)
         else:
             metric_model = FinslerMFM(config=config,
                                       classifier_model=classifier_model,
                                       tree=torch.from_numpy(adata.uns['tree']).float(),
-                                      temp=config.finsler_temp,
-                                      lamb=config.finsler_lamb,
-                                      K = config.K,
-                                      kappa=config.kappa,
-                                      alpha=config.alpha,
-                                      epsilon=config.epsilon,
+                                      temp=config.finsler.temp,
+                                      lamb=config.finsler.lamb,
+                                      K = config.mfm.K,
+                                      kappa=config.mfm.kappa,
+                                      alpha=config.mfm.alpha,
+                                      epsilon=config.mfm.epsilon,
                                       )
     elif config.metric == "gaga":
         pass
@@ -94,7 +95,7 @@ def build_embed(config, adata, metric_model):
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     t_global_min, t_global_max = min(timepoints), max(timepoints)
     
-    if config.use_finsler:
+    if config.finsler.use:
         embed_model = FinslerEmbedNetTrainBase(metric_model=metric_model,
                                                geo_net=geo_net,
                                                embed_net=embed_net,
@@ -164,7 +165,6 @@ def build_trainer(config, wandb_logger, phase):
 
 def run_full_model(config, project = None, adata = None, dataset = None):
     
-    original_config = config.copy()
     X, y = extract_singleton_dataset(adata)
 
     classifier_model, metric_model, embed_model, flow_model = None, None, None, None
@@ -174,14 +174,14 @@ def run_full_model(config, project = None, adata = None, dataset = None):
     for i, phase in enumerate(phase_list):
 
         print(f"Running phase {phase}:.......")
-        
-        ### wandb ###
-        wandb_logger = WandbLogger(project=project, name=phase, log_model=True)
-        if original_config:
-            wandb.init(config = original_config, project=project, reinit=True)
+
+        if config.use_wandb:
+            config_dict = OmegaConf.to_container(config, resolve=True, throw_on_missing=True)
+            wandb_logger = WandbLogger(project=project, name=phase, log_model=True)
+            wandb.init(config=config_dict, project=project, reinit=True)
+            # config = wandb.config
         else:
-            wandb.init(reinit=True)
-        config = wandb.config
+            wandb_logger = False 
 
         if phase == 'classifier':
             classifier_model = build_classifier(config)    
@@ -227,16 +227,18 @@ def run_full_model(config, project = None, adata = None, dataset = None):
                  'metric': metric_model,
                  'embed': embed_model,
                  'flow': flow_model}[phase]
-        wandb_logger.watch(model, log="all")
+        if config.use_wandb:
+            wandb_logger.watch(model, log="all")
         trainer.fit(model=model, train_dataloaders=train_dataloader)
-        wandb.finish()
+        if config.use_wandb:
+            wandb.finish()
 
-        try:
-            import wandb as _wandb
-            _wandb.unwatch(model)
-        except Exception:
-            pass
-        
+            try:
+                import wandb as _wandb
+                _wandb.unwatch(model)
+            except Exception:
+                pass
+            
         ### cleanup ###
         model.eval()
         freeze_params(model)

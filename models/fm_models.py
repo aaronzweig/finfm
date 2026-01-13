@@ -14,6 +14,8 @@ from torchvision import transforms
 from torchcfm.models import MLP
 from torchcfm.utils import plot_trajectories, torch_wrapper
 
+from models.cfm import OTFlowMatcher
+
 from .base_model import *
 from torchdyn.core import NeuralODE
 
@@ -42,6 +44,7 @@ class FlowNetTrainBase(ModelBase):
     ):
         super().__init__(**kwargs)
         self.flow_matcher = embed_model.flow_matcher
+        # self.flow_matcher = OTFlowMatcher(sigma=self.config.sigma)
         self.flow_net = flow_net
         self.t_global_min = t_global_min
         self.t_global_max = t_global_max
