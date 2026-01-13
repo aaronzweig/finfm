@@ -54,6 +54,7 @@ class swish(nn.Module):
         return x * torch.sigmoid(x)
 
 ACTIVATION_MAP = {
+    "identity": nn.Identity,
     "relu": nn.ReLU,
     "sigmoid": nn.Sigmoid,
     "tanh": nn.Tanh,

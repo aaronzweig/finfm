@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+POT
+torch
+pytorch-lightning
+wandb

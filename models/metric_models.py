@@ -129,7 +129,7 @@ class FinslerMixin:
 
     
     def classifier_fn(self, x):
-        return torch.softmax(torch.clamp(self.classifier_model(x), max=self.logit_clamp) / self.temp, dim=-1)
+        return torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
 
     def _pad_tree(self, tree):
         target = tree.shape[-1] + 1
@@ -151,9 +151,12 @@ class FinslerMixin:
         
         tree_input = self.tree if self.classifier_model.use_dummy_class == False else self._pad_tree(self.tree)
 
-        u = 1 - f_x @ (tree_input.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
+        u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
 
-        finsler_term = torch.sum(Jf_x_v * self.fisher_rao(x) * u, dim=-1)
+        # D = self.fisher_rao(x)
+        D = torch.ones_like(f_x)
+
+        finsler_term = torch.sum(Jf_x_v * D * u, dim=-1)
         return riemann_term + self.lamb * F.relu(finsler_term)
 
 class FinslerCFM(FinslerMixin, MetricNetCFM):
