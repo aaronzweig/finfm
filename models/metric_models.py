@@ -125,6 +125,9 @@ class FinslerMixin:
         self.classifier_model = classifier_model
         self.lamb = lamb
         self.tree = self._pad_tree(tree)
+
+        print("DEBUG: no fisher rao")
+
     
     def classifier_fn(self, x):
         return torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
@@ -149,7 +152,6 @@ class FinslerMixin:
         
         u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
 
-        print("DEBUG: no fisher rao")
         # D = self.fisher_rao(x)
         D = torch.ones_like(f_x)
 
