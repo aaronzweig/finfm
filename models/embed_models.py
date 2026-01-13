@@ -157,7 +157,7 @@ class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
         dphi, dpsi = df_x_v[:, self.beta.shape[0]:], df_x_v[:, :self.beta.shape[0]] @ -self.beta
         norm_diff = torch.abs(torch.norm(dphi, dim=-1) + dpsi - self.F(x, v))
         loss = torch.mean(norm_diff)
-        return loss
+        return loss 
 
     def cost_matrix_fn(self, x0, x1):
         z0 = self.embed_fn(x0)

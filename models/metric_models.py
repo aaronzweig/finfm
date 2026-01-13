@@ -123,11 +123,21 @@ class FinslerMixin:
         self.eps = 1e-8
         self.temp = temp
         self.classifier_model = classifier_model
-        self.tree = tree
         self.lamb = lamb
+        self.logit_clamp = 10.0
+        self.tree = tree
+
     
     def classifier_fn(self, x):
         return torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
+
+    def _pad_tree(self, tree):
+        target = tree.shape[-1] + 1
+        padded = torch.zeros((target, target))
+        rows = min(target, tree.shape[0])
+        cols = min(target, tree.shape[1])
+        padded[:rows, :cols] = tree[:rows, :cols]
+        return padded
 
     def fisher_rao(self, x):
         p = self.classifier_fn(x)
@@ -138,6 +148,8 @@ class FinslerMixin:
     def forward(self, x, v):
         riemann_term = super().forward(x, v)
         f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
+        
+        tree_input = self.tree if self.classifier_model.use_dummy_class == False else self._pad_tree(self.tree)
 
         u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
 
