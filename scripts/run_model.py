@@ -25,10 +25,12 @@ from omegaconf import OmegaConf
     
 def build_classifier(config):
 
+    print("### DEBUG: classifier is constrained to linear ###")
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
                                      output_dim=config.num_classes,
                                      hidden_dims=[config.hidden_dim]*config.num_layers,
-                                     layer_norm=True,)
+                                     layer_norm=True,
+                                     activation="identity")
 
     classifier_model = ClassifierNetTrainBase(classifier_net=classifier_net, config=config)
     return classifier_model
@@ -228,7 +230,8 @@ def run_full_model(config, project = None, adata = None, dataset = None):
                  'embed': embed_model,
                  'flow': flow_model}[phase]
         if config.use_wandb:
-            wandb_logger.watch(model, log="all")
+            # wandb_logger.watch(model, log="all")
+            wandb_logger.watch(model, log=None)
         trainer.fit(model=model, train_dataloaders=train_dataloader)
         if config.use_wandb:
             wandb.finish()
@@ -242,7 +245,6 @@ def run_full_model(config, project = None, adata = None, dataset = None):
         ### cleanup ###
         model.eval()
         freeze_params(model)
-        # model.to("cpu")
 
     return classifier_model, metric_model, embed_model, flow_model
 
