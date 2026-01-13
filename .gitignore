@@ -4,3 +4,4 @@ conditional-flow-matching/
 data/
 __pycache__
 .run
+lightning_logs

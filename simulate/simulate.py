@@ -120,6 +120,52 @@ def sample_diamond(size, d):
     
     return x, y, t, tree
 
+from torchdyn.datasets import generate_moons
+import math
+import torch
+def sample_moons(size, d):
+
+    var = 0.1
+    scale = 5
+    m = torch.distributions.multivariate_normal.MultivariateNormal(
+        torch.zeros(d), math.sqrt(var) * torch.eye(d)
+    )
+    centers = [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1.0 / np.sqrt(2), 1.0 / np.sqrt(2)),
+        (1.0 / np.sqrt(2), -1.0 / np.sqrt(2)),
+        (-1.0 / np.sqrt(2), 1.0 / np.sqrt(2)),
+        (-1.0 / np.sqrt(2), -1.0 / np.sqrt(2)),
+    ]
+    centers = torch.tensor(centers) * scale
+    noise = m.sample((size,))
+    multi = torch.multinomial(torch.ones(8), size, replacement=True)
+    data = []
+    for i in range(size):
+        data.append(centers[multi[i]] + noise[i])
+    x0 = torch.stack(data).numpy()
+
+    x1, _ = generate_moons(size, noise=0.2)
+    x1 = x1.numpy()
+    x1 = x1 * 3 - 1
+
+    x = np.concatenate([x0, x1], axis=0)
+
+    y = np.zeros(x.shape[0])
+    t0 = np.zeros(x0.shape[0])
+    t1 = np.zeros(x1.shape[0]) + 1
+    t = np.concatenate([t0, t1], axis=0)
+
+    tree = np.zeros((1,1))
+    
+    return x, y, t, tree
+
+
+
+
 def process_fake_data(size, d, sample_fn, normalize=False):
     x, y, t, tree = sample_fn(size, d)
 
