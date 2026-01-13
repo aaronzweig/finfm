@@ -163,3 +163,22 @@ class SimpleDenseNet(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+class LinearNet(nn.Module):
+    def __init__(self,
+                 input_dim: int,
+                 output_dim: int,
+                 hidden_dims: List[int]
+                 ):
+        super().__init__()
+        dims = [input_dim, *hidden_dims, output_dim]
+        layers = []
+        for i in range(len(dims) - 2):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+        layers.append(nn.Linear(dims[-2], dims[-1]))
+        self.model = nn.Sequential(*layers)
+    
+    def forward(self, x):
+        return self.model(x)
+                
