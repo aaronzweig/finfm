@@ -35,7 +35,7 @@ def ot_dist(x, y, a = None, b = None, p=2):
 #     dist = ot.sinkhorn2(a, b, M, ot_epsilon, method='sinkhorn_log')
 #     return dist
 
-def predict(embed_model, adata, t, p=2, num_traj=2000, batch_size=512):
+def predict(embed_model, adata, t, p=1, num_traj=2000, batch_size=512):
     
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     index = timepoints.index(t)
@@ -49,10 +49,14 @@ def predict(embed_model, adata, t, p=2, num_traj=2000, batch_size=512):
     train_dataset = ShufflingDataset(dataset, batch_size) #TODO: replace with ShufflingOTDataset when that actually works
     train_dataloader = DataLoader(train_dataset, batch_size = 1, shuffle=True)
 
-    samples = torch.empty()
-    while samples.shape[0] < num_traj:
+    samples = []
+    total = 0
+    while total < num_traj:
         batch = next(iter(train_dataloader))
-        samples = torch.cat([samples, embed_model.sample_geodesic_time(batch, t)])
+        x = embed_model.sample_geodesic_time(batch, t)
+        samples.append(x)
+        total += x.shape[0]
+    samples = torch.cat(samples, dim=0)[:num_traj]
 
     true = torch.tensor(adata[adata.obs['timepoint'] == t].obsm['X_pca']).to(embed_model.device)
     
