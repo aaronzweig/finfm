@@ -70,6 +70,32 @@ def sample_omega(size, d):
     tree[4,5] = 1
     return x, y, t, tree
 
+def sample_wedge(size, d):
+    r = np.sqrt(np.random.uniform(0, 1, size=size))
+    theta = np.pi / 2 * np.random.uniform(0, 1, size=size)
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+    return np.stack([x,y], axis=1)
+
+def sample_disk(size, d):
+    sizes = [size//4] * 4
+    sigma = 0.05
+    assert d == 2
+
+    x0 = sample_wedge(sizes[0], d)
+    x1 = sample_wedge(sizes[1], d) * np.array([[-1, 1]])
+    x2 = sample_wedge(sizes[2], d) * np.array([[-1, -1]])
+    x3 = sample_wedge(sizes[3], d) * np.array([[1, -1]])
+
+    x = np.concatenate([x0, x1, x2, x3], axis = 0)
+    y = np.repeat([0,1,2,3], size//4)
+    t = np.repeat([0,0,1,1], size//4)
+    tree = np.zeros((6,6))
+    tree[0,1] = 1
+    tree[1,2] = 1
+    tree[2,3] = 1
+    return x, y, t, tree
+
 def sample_points(size, d):
     sizes = [size//3] * 3
 
@@ -124,6 +150,8 @@ from torchdyn.datasets import generate_moons
 import math
 import torch
 def sample_moons(size, d):
+
+    assert d == 2, "Not implemented high dim moons yet"
 
     var = 0.1
     scale = 5

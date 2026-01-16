@@ -39,7 +39,6 @@ class FlowNetTrainBase(ModelBase):
         flow_net,
         t_global_min,
         t_global_max,
-        sample_rescale,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -49,9 +48,7 @@ class FlowNetTrainBase(ModelBase):
         self.t_global_min = t_global_min
         self.t_global_max = t_global_max
         self.embed_model = embed_model
-        
-        self.sample_rescale = sample_rescale
-        
+                
     def normalize_time(self, t):
         return (t - self.t_global_min) / (self.t_global_max - self.t_global_min)
     
@@ -91,8 +88,6 @@ class FlowNetTrainBase(ModelBase):
 
         device = self.get_device()
 
-        x /= self.sample_rescale.to(device)
-
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
     
@@ -105,7 +100,7 @@ class FlowNetTrainBase(ModelBase):
                 t_span=torch.linspace(t0, t1, steps),
             ).cpu()
 
-        return traj * self.sample_rescale.unsqueeze(0).to(device)
+        return traj
 
     def sample(self, x, t0, t1, num_samples, steps=2000):
         traj = self.sample_traj(x, t0, t1, num_samples, steps)
@@ -176,8 +171,6 @@ class FlowNetTrainBase(ModelBase):
 
 #     def sample_traj_and_weight(self, x, c, t0, t1, num_samples, steps=2000):
 
-#         x /= self.sample_rescale
-
 #         device = self.get_device()
 #         t0 = self.normalize_time(t0)
 #         t1 = self.normalize_time(t1)
@@ -194,7 +187,6 @@ class FlowNetTrainBase(ModelBase):
 #                 t_span=torch.linspace(t0, t1, steps),
 #             ).cpu()
 
-#         traj[-1,:,:-1] *= self.sample_rescale
 #         return traj 
 
 #     def sample_and_weight(self, x, c, t0, t1, num_samples, steps=2000):

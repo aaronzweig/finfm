@@ -7,39 +7,25 @@ from utils.preprocess import *
 
 
 
-def process_data(pc_dim = None, data="zebrafish"):
-    path = "/home/mingxuanzhang/zebrafish"
-    if not os.path.isdir(path):
-        path = "/home/azweig/projects/zebrafish/data"
+def process_data(pc_dim, data="zebrafish"):
+    path = ".."
     if data == "zebrafish":
         suffix = "pairwise_hvg.h5ad"
         filename = os.path.join(path, suffix)
         adata = load_data(filename)
         sc.tl.pca(adata, n_comps = pc_dim, mask_var = None) #because load_data already filters for hvg + perturbed genes
+
+        adata.uns['std'] = np.ones((1,pc_dim))
+        adata.uns['tree'] = None
+
     elif data == "cite":
         suffix = "cite.h5ad"
         filename = os.path.join(path, suffix)
         adata = sc.read(filename)
         adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
         adata.obs['timepoint'] = adata.obs['day']
-        if pc_dim != 100:
-            sc.tl.pca(adata, n_comps = pc_dim)
         #TODO: the wrong donor!???? But we downloaded it from https://data.mendeley.com/datasets/hhny5ff7yj/1
-    elif data == "EB":
-        suffix = "EB.h5ad"
-        filename = os.path.join(path, suffix)
-        adata = sc.read(filename)
-        adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
-        adata.obs["timepoint"] = adata.obs["timepoint"].cat.codes + 1
-        sc.tl.pca(adata, n_comps = pc_dim)
-
-    key = 'gene_target'
-    values = []
-    for c in list(adata.obs['gene_target'].unique()):
-        # if c in adata.var_names.tolist(): #would mute gene_targets that aren't exactly one gene
-        values.append(c)
-
-    return adata, values
+    return adata
 
 def extract_paired_dataset(adata, use_rep='X_pca'):
     

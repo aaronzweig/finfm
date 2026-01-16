@@ -8,7 +8,7 @@ num_classes: -1
 # Trainer settings
 classifier_max_epochs: 500
 metric_max_epochs: 1000
-embed_max_epochs: 2000
+embed_max_epochs: 3000
 flow_max_epochs: 10000
 gradient_clip_val: 0
 warmup_steps: 0
@@ -32,7 +32,7 @@ skip: False
 # Debug settings
 force_cpu: False
 detect_anomaly: False
-use_wandb: False,
+use_wandb: True
 
 # Classifier settings
 dummy_prior: 0.05
@@ -40,7 +40,7 @@ dummy_kl_weight: 0.05
 
 # Metric / Flow settings
 metric: "cfm"
-sigma: 0.01
+sigma: 0.0
 ot_in_embed: True
 fast_ot: False
 

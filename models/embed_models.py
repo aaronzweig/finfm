@@ -18,7 +18,6 @@ class EmbedNetTrainBase(ModelBase):
         geo_net,
         t_global_min,
         t_global_max,
-        sample_rescale,
         *args,
         **kwargs,
     ):
@@ -30,13 +29,13 @@ class EmbedNetTrainBase(ModelBase):
         self.t_global_min = t_global_min
         self.t_global_max = t_global_max
 
-        self.sample_rescale = sample_rescale.float()
-
         self.flow_matcher = MetricFlowMatcher(sigma=self.config.sigma,
                                               geo_fn = self.geo_fn,
                                               cost_matrix_fn = self.cost_matrix_fn,
                                               no_ot = self.config.fast_ot,
                                               )
+
+        print("DEBUG: turned off random v in embed loss")
 
     def embed_fn(self, x):
             return self.embed_net(x)
@@ -48,7 +47,6 @@ class EmbedNetTrainBase(ModelBase):
             return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
 
     def F(self, x, v):
-        x = x * self.sample_rescale.to(self.get_device())
         return self.metric_model(x, v)
 
     def normalize_time(self, t):
@@ -90,11 +88,8 @@ class EmbedNetTrainBase(ModelBase):
 
             #TODO: should we normalize dxt_free too?  Morally yes because we're comparing two homogeneous norms
             loss_embed += self.embed_loss(xt_free, dxt_free)
-            loss_embed += self.embed_loss(xt_free, v)
+            # loss_embed += self.embed_loss(xt_free, v)
             loss_geo += self.geo_loss(xt, dxt)
-
-        loss_embed /= torch.max(self.sample_rescale) ** 2
-        loss_geo /= torch.max(self.sample_rescale) ** 2
 
         return loss_embed / x0.shape[0], loss_geo / x0.shape[0]
 
@@ -118,9 +113,6 @@ class EmbedNetTrainBase(ModelBase):
         
         i = 0
         x0_, x1_ = x0[i], x1[i]
-
-        x0_ /= self.sample_rescale
-        x1_ /= self.sample_rescale
         
         if ot_sample:
             x0_, x1_ = self.flow_matcher.ot_sample(x0_, x1_) #Freeze a sample of points from coupling
@@ -131,10 +123,33 @@ class EmbedNetTrainBase(ModelBase):
             t.requires_grad_(True)
             _, xt, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
                                                                                     t=t, ot_sample=False)
-            paths.append(xt.detach() * self.sample_rescale)
+            paths.append(xt.detach())
 
         self.flow_matcher.sigma = old_sigma
         return torch.stack(paths, dim = 0)
+    
+    def sample_geodesic_time(self, batch, t):
+
+        old_sigma = self.flow_matcher.sigma
+        self.flow_matcher.sigma = 0
+
+        x0, x1, t0, t1 = self._prepare_batch(batch)
+        assert x0.shape[0] == 1
+        x0, x1, t0, t1 = x0[0], x1[0], t0[0], t1[0]
+        t0 = self.normalize_time(t0)
+        t1 = self.normalize_time(t1)
+
+        t = self.normalize_time(t)
+        t = (t - t0) / (t1 - t0) #TODO: confirm this normalization is correct on 2d
+
+        x0, x1 = self.flow_matcher.ot_sample(x0, x1) #Freeze a sample of points from coupling
+
+        t = t.unsqueeze(0).repeat(x0.shape[0])
+        t.requires_grad_(True)
+        _, xt, _ = self.flow_matcher.sample_location_and_conditional_flow(x0, x1, t0, t1, 
+                                                                                t=t, ot_sample=False)
+        self.flow_matcher.sigma = old_sigma
+        return xt.detach()
     
 
 class FinslerEmbedNetTrainBase(EmbedNetTrainBase):

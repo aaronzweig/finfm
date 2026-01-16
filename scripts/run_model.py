@@ -36,7 +36,7 @@ def build_classifier(config):
     classifier_model = ClassifierNetTrainBase(classifier_net=classifier_net, config=config)
     return classifier_model
 
-def build_metric(config, adata, classifier_model):
+def build_metric(config, tree, classifier_model):
 
     if config.metric == "cfm":
         if not config.finsler.use:
@@ -44,7 +44,7 @@ def build_metric(config, adata, classifier_model):
         else:
             metric_model = FinslerCFM(config=config,
                                       classifier_model=classifier_model,
-                                      tree=torch.from_numpy(adata.uns['tree']).float(),
+                                      tree=torch.from_numpy(tree).float(),
                                       temp=config.finsler.temp,
                                       lamb=config.finsler.lamb,
                                       )
@@ -60,7 +60,7 @@ def build_metric(config, adata, classifier_model):
         else:
             metric_model = FinslerMFM(config=config,
                                       classifier_model=classifier_model,
-                                      tree=torch.from_numpy(adata.uns['tree']).float(),
+                                      tree=torch.from_numpy(tree).float(),
                                       temp=config.finsler.temp,
                                       lamb=config.finsler.lamb,
                                       K = config.mfm.K,
@@ -76,15 +76,12 @@ def build_metric(config, adata, classifier_model):
 
     return metric_model
 
-def build_embed(config, adata, metric_model):
-
-    sample_rescale = torch.from_numpy(adata.uns['std'])
+def build_embed(config, timepoints, metric_model):
 
     embed_net = SimpleEmbedNet(input_dim=config.pc_dim,
                   output_dim=config.latent_dim,
                   layer_norm=True,
                   hidden_dims=[config.hidden_dim]*config.num_layers,
-                  sample_rescale=sample_rescale,
                   rescale=config.rescale,
                   skip=config.skip)
 
@@ -95,7 +92,6 @@ def build_embed(config, adata, metric_model):
                       hidden_dims=[config.hidden_dim]*config.num_layers,
                       rescale=config.rescale)
 
-    timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     t_global_min, t_global_max = min(timepoints), max(timepoints)
     
     if config.finsler.use:
@@ -104,20 +100,18 @@ def build_embed(config, adata, metric_model):
                                                embed_net=embed_net,
                                                config=config,
                                                t_global_min=t_global_min,
-                                               t_global_max=t_global_max,
-                                               sample_rescale=sample_rescale)
+                                               t_global_max=t_global_max)
     else:
         embed_model = EmbedNetTrainBase(metric_model=metric_model,
                                     geo_net=geo_net,
                                     embed_net=embed_net,
                                     config=config,
                                     t_global_min=t_global_min,
-                                    t_global_max=t_global_max,
-                                    sample_rescale=sample_rescale)
+                                    t_global_max=t_global_max)
 
     return embed_model
 
-def build_flow(config, adata, embed_model):
+def build_flow(config, timepoints, embed_model):
 
     flow_net = SinNet(input_dim=config.pc_dim,
                       output_dim=config.pc_dim,
@@ -125,16 +119,13 @@ def build_flow(config, adata, embed_model):
                       layer_norm=True,
                       hidden_dims=[config.hidden_dim]*config.num_layers)
 
-    timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     t_global_min, t_global_max = min(timepoints), max(timepoints)
-    sample_rescale = torch.from_numpy(adata.uns['std'])
     
     flow_model = FlowNetTrainBase(flow_net=flow_net,
                              embed_model=embed_model,
                              config=config,
                              t_global_min=t_global_min,
-                             t_global_max=t_global_max,
-                             sample_rescale=sample_rescale)
+                             t_global_max=t_global_max)
 
     return flow_model
 
@@ -164,13 +155,40 @@ def build_trainer(config, wandb_logger, phase):
         )
     return trainer
 
-
-
-def run_full_model(config, project = None, adata = None, dataset = None):
-    
+def build_singleton_dataloader(config, adata):
     X, y = extract_singleton_dataset(adata)
+    train_dataset = TensorDataset(X, y)
+    train_dataloader = DataLoader(train_dataset,
+                                  batch_size = config.score_batch_size,
+                                  drop_last=True, 
+                                  shuffle=True)
 
-    classifier_model, metric_model, embed_model, flow_model = None, None, None, None
+    return train_dataloader
+
+def build_paired_dataloader(config, adata):
+    dataset = extract_paired_dataset(adata)
+
+    if config.fast_ot:
+        #TODO: hard-coded?  Actually validate if this works sensibly
+        #TODO: we don't need to update during flow btw
+        update_epoch_rate = 50
+        train_dataset = ShufflingOTDataset(dataset, config.flow_batch_size, update_epoch_rate)
+    else:
+        train_dataset = ShufflingDataset(dataset, config.flow_batch_size)
+    train_dataloader = DataLoader(train_dataset, batch_size = config.loader_batch_size, shuffle=True)
+    return train_dataloader
+
+def run_full_model(config, project, singleton_dataloader, paired_dataloader, timepoints, tree):
+    
+    classifier_model = build_classifier(config)    
+    metric_model = build_metric(config, tree, classifier_model)
+    embed_model = build_embed(config, timepoints, metric_model)
+    flow_model = build_flow(config, timepoints, embed_model)
+
+    if config.metric == "mfm":
+        #TODO: hard-coded?
+        metric_model.train_dataloader = singleton_dataloader
+
 
     phase_list =  ['classifier', 'metric', 'embed', 'flow']
     
@@ -185,43 +203,6 @@ def run_full_model(config, project = None, adata = None, dataset = None):
             # config = wandb.config
         else:
             wandb_logger = False 
-
-        if phase == 'classifier':
-            classifier_model = build_classifier(config)    
-
-        if phase == 'metric':
-            metric_model = build_metric(config, adata, classifier_model)
-
-        if phase == 'embed':
-            embed_model = build_embed(config, adata, metric_model)
-
-        if phase == 'flow':
-            flow_model = build_flow(config, adata, embed_model)
-
-
-        ### build dataset ###
-        if phase in ['classifier', 'metric']:
-
-            train_dataset = TensorDataset(X, y)
-            train_dataloader = DataLoader(train_dataset, 
-                                          batch_size = config.score_batch_size, 
-                                          drop_last=True, 
-                                          shuffle=True)
-
-            if phase == "metric" and config.metric == "mfm":
-                #TODO: hard-coded?
-                metric_model.train_dataloader = train_dataloader
-            
-        else:
-
-            if config.fast_ot:
-                #TODO: hard-coded?
-                update_epoch_rate = 50 if phase == "embed" else 10000
-                train_dataset = ShufflingOTDataset(dataset, config.flow_batch_size, update_epoch_rate)
-            else:
-                train_dataset = ShufflingDataset(dataset, config.flow_batch_size)
-            train_dataloader = DataLoader(train_dataset, batch_size = config.loader_batch_size, shuffle=True)
-
         
         
         ### train ###
@@ -230,6 +211,9 @@ def run_full_model(config, project = None, adata = None, dataset = None):
                  'metric': metric_model,
                  'embed': embed_model,
                  'flow': flow_model}[phase]
+        
+        train_dataloader = singleton_dataloader if phase in ["classifier", "metric"] else paired_dataloader
+
         if config.use_wandb:
             # wandb_logger.watch(model, log="all")
             wandb_logger.watch(model, log=None)

@@ -85,7 +85,6 @@ class SimpleEmbedNet(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        sample_rescale,
         activation: str = "selu",
         layer_norm: bool = False,
         hidden_dims: List[int] = [],
@@ -103,7 +102,6 @@ class SimpleEmbedNet(nn.Module):
         self.skip = skip
 
         if skip: 
-            self.D = torch.diag(sample_rescale.squeeze(0)).float()
             if input_dim <= output_dim:
                 self.Q = torch.eye(output_dim, input_dim)
             else: 
@@ -114,7 +112,7 @@ class SimpleEmbedNet(nn.Module):
         skip_embed = 0
         if self.skip:
             device = next(self.parameters()).device
-            skip_embed = x @ self.D.to(device) @ self.Q.T.to(device)
+            skip_embed = x @ self.Q.T.to(device)
         return skip_embed + self.rescale * self.model(x)
         
 

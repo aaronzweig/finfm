@@ -6,17 +6,15 @@ import pandas as pd
 
 import os 
 import sys
-sys.path.append(os.path.abspath(".."))
-sys.path.append(os.path.abspath("."))
 
 from utils.preprocess import *
 
+#TODO: doesn't actually run yet, need to fix module stuff
+
 if __name__ == "__main__":
 
-    path = "/home/azweig/projects/zebrafish/data"
-    suffix = "1k_hvg.h5ad"
-    filename = os.path.join(path, suffix)
+    filename = "1k_hvg.h5ad"
 
-    adata = import_data()
+    adata = import_zebrafish_data()
     adata = preprocess(adata, n_top_genes=1000, exclude_highly_expressed=False)
     adata.write(filename)
