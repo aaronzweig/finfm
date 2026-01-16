@@ -7,7 +7,7 @@ import pandas as pd
 
 def import_zebrafish_data():
     
-    path = "../data"
+    path = "data"
     mtx_suffix = "zscape_perturb_full_raw_counts.mtx"
     cell_suffix = "zscape_perturb_full_cell_metadata.csv"
     gene_suffix = "zscape_perturb_full_gene_metadata.csv"

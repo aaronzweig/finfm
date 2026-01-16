@@ -90,7 +90,7 @@ def sample_disk(size, d):
     x = np.concatenate([x0, x1, x2, x3], axis = 0)
     y = np.repeat([0,1,2,3], size//4)
     t = np.repeat([0,0,1,1], size//4)
-    tree = np.zeros((6,6))
+    tree = np.zeros((4,4))
     tree[0,1] = 1
     tree[1,2] = 1
     tree[2,3] = 1

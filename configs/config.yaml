@@ -38,6 +38,10 @@ use_wandb: True
 dummy_prior: 0.05
 dummy_kl_weight: 0.05
 
+classifier:
+  hidden_dim: 20
+  num_layers: 1
+
 # Metric / Flow settings
 metric: "cfm"
 sigma: 0.0

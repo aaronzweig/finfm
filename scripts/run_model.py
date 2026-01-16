@@ -26,12 +26,10 @@ from datasets.process import *
 from omegaconf import OmegaConf
     
 def build_classifier(config):
-    print("### DEBUG: classifier is constrained to linear ###")
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
                                      output_dim=config.num_classes+1,
-                                     hidden_dims=[config.hidden_dim]*config.num_layers,
-                                     layer_norm=True,
-                                     activation="identity")
+                                     hidden_dims=[config.classifier.hidden_dim]*config.classifier.num_layers,
+                                     layer_norm=True)
 
     classifier_model = ClassifierNetTrainBase(classifier_net=classifier_net, config=config)
     return classifier_model
