@@ -9,10 +9,10 @@ SEED=${SEED:-1111}
 # W&B logging is off by default; export WANDB_ARGS to enable (e.g., '--wandb --wandb_mode offline --wandb_project gaga-flow-matching').
 WANDB_ARGS=${WANDB_ARGS:-}
 
-python train.py \
+python train_clean.py \
     --seed "${SEED}" \
     --deterministic \
-    --max_epochs 10 \
+    --max_epochs 1 \
     --neg_method add \
     --num_samples 128 \
     --batch_size 32 \
@@ -23,7 +23,7 @@ python train.py \
     --disc_batch_size 128 \
     --disc_layer_widths 256 128 64 \
     --disc_factor 10 \
-    --disc_max_epochs 100 \
+    --disc_max_epochs 1 \
     --alpha 8.0 \
     --embed_t \
     --start_group 0 \
@@ -32,7 +32,7 @@ python train.py \
     --range_size 0.3 \
     --data_path "${DATA_PATH}" \
     --train_autoencoder \
-    --ae_max_epochs 100 \
+    --ae_max_epochs 1 \
     --ae_early_stop_patience 50 \
     --ae_latent_dim 3 \
     --ae_batch_norm \
@@ -40,14 +40,14 @@ python train.py \
     --ae_dropout 0.2 \
     --ae_dist_mse_decay 0.0 \
     --ae_weights_dist 77.4 \
-    --ae_weights_reconstr 0.32 \
-    --ae_weights_cycle 1 \
+    --ae_weights_reconstr 0 \
+    --ae_weights_cycle 0 \
     --ae_weights_cycle_dist 0 \
     --ae_lr 1e-3 \
     --ae_weight_decay 1e-4 \
     --ae_activation relu \
     --hidden_dim 64 \
-    --n_tsteps 100 \
+    --n_tsteps 20 \
     --flow_weight 1.0 \
     --length_weight 1.0 \
     ${WANDB_ARGS}

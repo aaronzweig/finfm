@@ -5,6 +5,8 @@ import torch
 import numpy as np
 from typing import List, Optional
 import math
+from torch.nn.utils import spectral_norm
+
 
 class SinNet(nn.Module):
     def __init__(
@@ -147,17 +149,27 @@ class SimpleDenseNet(nn.Module):
         output_dim: int,
         activation: str = "selu",
         layer_norm: bool = False,
+        use_spectral_norm: bool = False,
+        dropout: float = 0.0,
         hidden_dims: List[int] = [],
     ):
         super().__init__()
         dims = [input_dim, *hidden_dims, output_dim]
         layers = []
         for i in range(len(dims) - 2):
-            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            linear = nn.Linear(dims[i], dims[i + 1])
+            if use_spectral_norm:
+                linear = spectral_norm(linear)
+            layers.append(linear)
             if layer_norm:
                 layers.append(nn.LayerNorm(dims[i + 1]))
             layers.append(ACTIVATION_MAP[activation]())
-        layers.append(nn.Linear(dims[-2], dims[-1]))
+            if dropout > 0:
+                layers.append(nn.Dropout(dropout))
+        linear = nn.Linear(dims[-2], dims[-1])
+        if use_spectral_norm:
+            linear = spectral_norm(linear)
+        layers.append(linear)
         self.model = nn.Sequential(*layers)
 
     def forward(self, x):
