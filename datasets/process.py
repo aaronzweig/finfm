@@ -12,7 +12,7 @@ def process_data(pc_dim, data="zebrafish"):
         filename = os.path.join(path, suffix)
         adata = load_data(filename)
 
-        subset = (adata.obs['gene_target'] == 'ctrl-inj') | (adata.obs['tissue'] == "Central Nervous System")
+        subset = (adata.obs['gene_target'] == 'ctrl-inj') & (adata.obs['tissue'] == "Central Nervous System")
         adata = adata[subset]
         sc.tl.pca(adata, n_comps = pc_dim, mask_var = None) #because load_data already filters for hvg + perturbed genes
 

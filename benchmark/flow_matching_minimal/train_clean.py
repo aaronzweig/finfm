@@ -14,13 +14,19 @@ except Exception:
     WandbLogger = None
 from torch.utils.data import DataLoader, Dataset
 
+# EXTREME LAZY FIX FOR PATH MANAGEMENT
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+
 from autoencoder import (
     Autoencoder,
     PointCloudDataset,
     make_custom_collate_fn,
-    split_train_val_test,
 )
-from discriminator import train_discriminator
+from discriminator import Discriminator
 from geodesic_fm import GeodesicFlowMatching
 from off_manifold import make_offmanifold
 from sampling import neg_sample_additive, sampling_rejection
@@ -79,18 +85,9 @@ def encode_data(x, encoder, device, batch_size=256):
 
 
 def train_autoencoder(pointcloud, distances, labels, args, device, logger=None):
-    train_idx, val_idx, test_idx = split_train_val_test(pointcloud, test_size=args.test_size, val_size=args.val_size)
-    train_dataset = PointCloudDataset(pointcloud[train_idx], distances[train_idx][:, train_idx])
-    val_dataset = PointCloudDataset(pointcloud[val_idx], distances[val_idx][:, val_idx])
-    test_dataset = PointCloudDataset(pointcloud[test_idx], distances[test_idx][:, test_idx])
-    train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=make_custom_collate_fn(train_dataset)
-    )
-    val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=make_custom_collate_fn(val_dataset)
-    )
-    test_loader = DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=make_custom_collate_fn(test_dataset)
+    dataset = PointCloudDataset(pointcloud, distances)
+    loader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, collate_fn=make_custom_collate_fn(dataset)
     )
 
     mean = pointcloud.mean(axis=0)
@@ -101,9 +98,6 @@ def train_autoencoder(pointcloud, distances, labels, args, device, logger=None):
         data_dim=pointcloud.shape[1],
         latent_dim=args.ae_latent_dim,
         encoder_layer_width=args.ae_encoder_layer_width,
-        decoder_layer_width=args.ae_decoder_layer_width,
-        activation=args.ae_activation,
-        batch_norm=args.ae_batch_norm,
         dropout=args.ae_dropout,
         use_spectral_norm=args.ae_use_spectral_norm,
         mean=mean,
@@ -118,38 +112,63 @@ def train_autoencoder(pointcloud, distances, labels, args, device, logger=None):
         weights_cycle_dist=args.ae_weights_cycle_dist,
     )
 
-    callbacks = [
-        pl.callbacks.EarlyStopping(monitor="val/loss", patience=args.ae_early_stop_patience, mode="min"),
-        pl.callbacks.ModelCheckpoint(
-            monitor="val/loss", save_top_k=1, mode="min", dirpath=args.checkpoint_dir, filename="autoencoder"
-        ),
-    ]
     trainer = pl.Trainer(
         max_epochs=args.ae_max_epochs,
         log_every_n_steps=args.ae_log_every_n_steps,
         accelerator=device,
         devices=1,
-        callbacks=callbacks,
         logger=logger,
         deterministic=args.deterministic,
     )
-    trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    return Autoencoder.load_from_checkpoint(callbacks[1].best_model_path, weights_only=False)
+    trainer.fit(model, train_dataloaders=loader)
+    return model
 
-# def eval_wasserstein(generated_data, real_data):
-#     gen_np = generated_data.detach().cpu().numpy() if torch.is_tensor(generated_data) else np.asarray(generated_data)
-#     real_np = real_data.detach().cpu().numpy() if torch.is_tensor(real_data) else np.asarray(real_data)
-#     cost_matrix = ot.dist(gen_np, real_np, metric="euclidean")
-#     gen_dist = np.ones(gen_np.shape[0]) / gen_np.shape[0]
-#     real_dist = np.ones(real_np.shape[0]) / real_np.shape[0]
-#     return ot.sinkhorn2(gen_dist, real_dist, cost_matrix, 0.5, method = "sinkhorn_log")
-#     # return ot.emd2(gen_dist, real_dist, cost_matrix)
+def train_discriminator(
+    x_pos,
+    x_neg,
+    encoder,
+    batch_size=128,
+    max_epochs=100,
+    lr=1e-3,
+    weight_decay=1e-4,
+    layer_widths=None,
+    logger=None,
+    deterministic=False,
+    checkpoint_dir=None,
+):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.backends.mps.is_available():
+        device = "mps"
 
-# EXTREME LAZY FIX FOR PATH MANAGEMENT
-import sys
-from pathlib import Path
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT))
+    X = torch.cat([x_pos, x_neg], dim=0)
+    Y = torch.cat(
+        [torch.ones(x_pos.shape[0], dtype=torch.long), torch.zeros(x_neg.shape[0], dtype=torch.long)],
+        dim=0,
+    )
+
+    dataset = torch.utils.data.TensorDataset(X, Y)
+
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    model = Discriminator(
+        in_dim=x_pos.shape[1],
+        lr=lr,
+        weight_decay=weight_decay,
+        layer_widths=layer_widths,
+    )
+    if checkpoint_dir is not None:
+        os.makedirs(checkpoint_dir, exist_ok=True)
+    trainer = pl.Trainer(
+        max_epochs=max_epochs,
+        log_every_n_steps=10,
+        accelerator=device,
+        devices=1,
+        logger=logger,
+        deterministic=deterministic,
+    )
+    trainer.fit(model, train_dataloaders=loader)
+    return model
+
 from eval.eval import *
 import scanpy as sc
 def main(args):
@@ -160,9 +179,13 @@ def main(args):
     os.makedirs(args.plots_save_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
+    #TODO: change to load two adatas: one with all data, one with a heldout timepoint and phate distances
+    #saved in adata.obsp
+
     adata = sc.read_h5ad(os.path.split(args.data_path)[0] + "/cite_100.h5ad")
-    x = adata.obsm['X_pca'][:,:100]
-    x_dist = np.load(args.data_path)['dist']
+    x = adata.obsm['X_pca']
+    x_dist = adata.obsp['dist']
+    # x_dist = np.load(args.data_path)['dist']
     labels = np.array(adata.obs['day_class'].tolist())
 
     if args.train_autoencoder:
@@ -178,7 +201,7 @@ def main(args):
     else:
         raise ValueError("Minimal codebase expects --train_autoencoder.")
 
-    x_encodings = encode_data(x, ae_model.encoder, device)
+    x_encodings = encode_data(x, ae_model, device)
 
     train_encodings_leave_out = x_encodings[labels != args.test_group]
     if args.neg_method != "add":
@@ -197,7 +220,7 @@ def main(args):
     wd_model = train_discriminator(
         torch.tensor(train_encodings_leave_out, dtype=torch.float32),
         torch.tensor(x_noisy, dtype=torch.float32),
-        ae_model.encoder,
+        ae_model,
         batch_size=args.disc_batch_size,
         max_epochs=args.disc_max_epochs,
         lr=args.disc_lr,
@@ -228,7 +251,7 @@ def main(args):
 
     ae_model.eval()
     wd_model.eval()
-    enc_func = lambda x: ae_model.encoder(x, normalize=True)
+    enc_func = lambda x: ae_model(x, normalize=True)
     ofm = make_offmanifold(enc_func, wd_model, disc_factor=args.disc_factor)
 
     gbmodel = GeodesicFlowMatching(
@@ -246,37 +269,15 @@ def main(args):
         length_weight=args.length_weight,
     )
 
-    callbacks = [
-        pl.callbacks.EarlyStopping(monitor="train_loss", patience=args.patience, mode="min"),
-        pl.callbacks.ModelCheckpoint(
-            monitor="train_loss", save_top_k=1, mode="min", dirpath=args.checkpoint_dir, filename="gbmodel"
-        ),
-    ]
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         log_every_n_steps=args.log_every_n_steps,
         accelerator=device,
         devices=1,
-        callbacks=callbacks,
         logger=wandb_logger,
         deterministic=args.deterministic,
     )
     trainer.fit(gbmodel, train_dataloaders=loader)
-    gbmodel = GeodesicFlowMatching.load_from_checkpoint(
-        callbacks[1].best_model_path,
-        func=ofm,
-        encoder=enc_func,
-        input_dim=x.shape[1],
-        hidden_dim=args.hidden_dim,
-        scale_factor=args.scale_factor,
-        embed_t=args.embed_t,
-        num_layers=args.num_layers,
-        n_tsteps=args.n_tsteps,
-        lr=args.lr,
-        weight_decay=args.weight_decay,
-        flow_weight=args.flow_weight,
-        length_weight=args.length_weight,
-    )
     gbmodel.to(device)
     gbmodel.eval()
 

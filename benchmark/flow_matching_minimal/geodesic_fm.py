@@ -3,20 +3,13 @@ from torch import nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
+# EXTREME LAZY FIX FOR PATH MANAGEMENT
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_hidden_layers=3):
-        super().__init__()
-        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
-        for _ in range(num_hidden_layers - 1):
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_dim, output_dim))
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.net(x)
-
+from models.modules import SimpleDenseNet
 
 class SimpleCondCurve(nn.Module):
     """Lightweight conditional curve used for flow matching."""
@@ -26,10 +19,14 @@ class SimpleCondCurve(nn.Module):
         self.embed_t = embed_t
         self.scale_factor = scale_factor
         feature_dim = input_dim * 2 + (hidden_dim if embed_t else 1)
-        self.modifier = MLP(feature_dim, hidden_dim, input_dim, num_hidden_layers=num_layers)
-        self.t_mlp = (
-            MLP(1, hidden_dim, hidden_dim, num_hidden_layers=2) if embed_t else None
-        )
+        self.modifier = SimpleDenseNet(input_dim=feature_dim,
+                                       output_dim=input_dim,
+                                       hidden_dims=[hidden_dim] * num_layers,
+                                       layer_norm=True)
+        self.t_mlp = SimpleDenseNet(input_dim=1,
+                                    output_dim=hidden_dim,
+                                    hidden_dims=[hidden_dim] * num_layers,
+                                    layer_norm=True)
 
     def forward(self, x0, x1, ts):
         ts = ts.unsqueeze(-1) if ts.dim() == 1 else ts  # [T, 1]
@@ -74,7 +71,6 @@ class GeodesicFlowMatching(pl.LightningModule):
         super().__init__()
         self.func = func if func is not None else (lambda x: x)
         self.encoder = encoder
-        self.flow_model = MLP(input_dim + 1, hidden_dim, input_dim, num_hidden_layers=num_layers)
         self.cond_curve = SimpleCondCurve(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
@@ -116,14 +112,8 @@ class GeodesicFlowMatching(pl.LightningModule):
         target_vel = self._finite_diff_velocity(curve, ts)
         length_loss = torch.norm(self._finite_diff_velocity(geom_curve, ts), dim=-1).mean()
 
-        flow_pred = self.flow_model(
-            self._flow_inputs(curve, ts).reshape(-1, curve.size(-1) + 1)
-        ).reshape_as(curve)
-        flow_loss = F.mse_loss(flow_pred, target_vel)
-
-        loss = self.length_weight * length_loss + self.flow_weight * flow_loss
+        loss = self.length_weight * length_loss
         self.log(f"{stage}_length", length_loss, prog_bar=True, on_epoch=True)
-        self.log(f"{stage}_flow", flow_loss, prog_bar=True, on_epoch=True)
         self.log(f"{stage}_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 

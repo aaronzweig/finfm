@@ -5,46 +5,13 @@ import pytorch_lightning as pl
 from torch.nn.utils import spectral_norm
 import os
 
+# EXTREME LAZY FIX FOR PATH MANAGEMENT
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-class MLP(nn.Module):
-    def __init__(
-        self,
-        in_dim,
-        out_dim,
-        layer_widths=None,
-        activation="relu",
-        batch_norm=False,
-        dropout=0.0,
-        use_spectral_norm=False,
-    ):
-        super().__init__()
-        layer_widths = layer_widths or [256, 128, 64]
-        layers = []
-        act_map = {"relu": nn.ReLU(), "leaky_relu": nn.LeakyReLU(), "tanh": nn.Tanh()}
-        if activation not in act_map:
-            raise ValueError(f"Invalid activation {activation}")
-
-        for i, width in enumerate(layer_widths):
-            in_features = in_dim if i == 0 else layer_widths[i - 1]
-            linear = nn.Linear(in_features, width)
-            if use_spectral_norm:
-                linear = spectral_norm(linear)
-            layers.append(linear)
-            if batch_norm:
-                layers.append(nn.BatchNorm1d(width))
-            layers.append(act_map[activation])
-            if dropout > 0:
-                layers.append(nn.Dropout(dropout))
-
-        final = nn.Linear(layer_widths[-1], out_dim)
-        if use_spectral_norm:
-            final = spectral_norm(final)
-        layers.append(final)
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.net(x)
-
+from models.modules import SimpleDenseNet
 
 class Discriminator(pl.LightningModule):
     def __init__(
@@ -61,12 +28,11 @@ class Discriminator(pl.LightningModule):
     ):
         super().__init__()
         self.normalize = normalize
-        self.mlp = MLP(
-            in_dim,
-            2,
-            layer_widths=layer_widths or [256, 128, 64],
-            activation=activation,
-            batch_norm=batch_norm,
+        self.mlp = SimpleDenseNet(
+            input_dim=in_dim,
+            output_dim=2,
+            hidden_dims=layer_widths or [256, 128, 64],
+            layer_norm=True,
             dropout=dropout,
             use_spectral_norm=use_spectral_norm,
         )
@@ -128,68 +94,3 @@ class Discriminator(pl.LightningModule):
 
     def negative_score(self, x):
         return self(x)[:, 0]
-
-
-def train_discriminator(
-    x_pos,
-    x_neg,
-    encoder,
-    batch_size=128,
-    max_epochs=100,
-    lr=1e-3,
-    weight_decay=1e-4,
-    layer_widths=None,
-    logger=None,
-    deterministic=False,
-    checkpoint_dir=None,
-):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if torch.backends.mps.is_available():
-        device = "mps"
-
-    X = torch.cat([x_pos, x_neg], dim=0)
-    Y = torch.cat(
-        [torch.ones(x_pos.shape[0], dtype=torch.long), torch.zeros(x_neg.shape[0], dtype=torch.long)],
-        dim=0,
-    )
-
-    train_idx = int(0.8 * len(X))
-    val_idx = int(0.9 * len(X))
-    train_dataset = torch.utils.data.TensorDataset(X[:train_idx], Y[:train_idx])
-    val_dataset = torch.utils.data.TensorDataset(X[train_idx:val_idx], Y[train_idx:val_idx])
-    test_dataset = torch.utils.data.TensorDataset(X[val_idx:], Y[val_idx:])
-
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    model = Discriminator(
-        in_dim=x_pos.shape[1],
-        lr=lr,
-        weight_decay=weight_decay,
-        layer_widths=layer_widths,
-    )
-    if checkpoint_dir is not None:
-        os.makedirs(checkpoint_dir, exist_ok=True)
-    callbacks = [
-        pl.callbacks.EarlyStopping(monitor="val_loss", patience=20, mode="min"),
-        pl.callbacks.ModelCheckpoint(
-            monitor="val_loss",
-            save_top_k=1,
-            mode="min",
-            filename="discriminator",
-            dirpath=checkpoint_dir,
-        ),
-    ]
-    trainer = pl.Trainer(
-        max_epochs=max_epochs,
-        log_every_n_steps=10,
-        accelerator=device,
-        devices=1,
-        callbacks=callbacks,
-        logger=logger,
-        deterministic=deterministic,
-    )
-    trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    trainer.test(ckpt_path="best", dataloaders=test_loader)
-    return Discriminator.load_from_checkpoint(callbacks[1].best_model_path)

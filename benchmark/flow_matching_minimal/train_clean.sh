@@ -40,8 +40,8 @@ python train_clean.py \
     --ae_dropout 0.2 \
     --ae_dist_mse_decay 0.0 \
     --ae_weights_dist 77.4 \
-    --ae_weights_reconstr 0.32 \
-    --ae_weights_cycle 1 \
+    --ae_weights_reconstr 0 \
+    --ae_weights_cycle 0 \
     --ae_weights_cycle_dist 0 \
     --ae_lr 1e-3 \
     --ae_weight_decay 1e-4 \
