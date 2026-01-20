@@ -36,6 +36,7 @@ class EmbedNetTrainBase(ModelBase):
                                               )
 
         print("DEBUG: turned off random v in embed loss")
+        print("DEBUG: skip embed for OT")
 
     def embed_fn(self, x):
             return self.embed_net(x)
@@ -43,8 +44,11 @@ class EmbedNetTrainBase(ModelBase):
     def geo_fn(self, x0, x1, t):
         return self.geo_net(torch.cat([x0, x1], dim=-1), t)
     
+    # def cost_matrix_fn(self, x0, x1):
+    #         return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
+
     def cost_matrix_fn(self, x0, x1):
-            return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
+            return torch.cdist(x0, x1) ** 2
 
     def F(self, x, v):
         return self.metric_model(x, v)
