@@ -30,13 +30,13 @@ class EmbedNetTrainBase(ModelBase):
         self.t_global_max = t_global_max
 
         self.flow_matcher = MetricFlowMatcher(sigma=self.config.sigma,
+                                              method=self.config.method,
+                                              reg=self.config.reg,
+                                              reg_m=self.config.reg_m,
                                               geo_fn = self.geo_fn,
-                                              cost_matrix_fn = self.cost_matrix_fn,
-                                              no_ot = self.config.fast_ot,
-                                              )
+                                              cost_matrix_fn = self.cost_matrix_fn)
 
-        print("DEBUG: turned off random v in embed loss")
-        print("DEBUG: skip embed for OT")
+        # print("DEBUG: skip embed for OT")
 
     def embed_fn(self, x):
             return self.embed_net(x)
@@ -44,11 +44,11 @@ class EmbedNetTrainBase(ModelBase):
     def geo_fn(self, x0, x1, t):
         return self.geo_net(torch.cat([x0, x1], dim=-1), t)
     
-    # def cost_matrix_fn(self, x0, x1):
-    #         return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
-
     def cost_matrix_fn(self, x0, x1):
-            return torch.cdist(x0, x1) ** 2
+            return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
+
+    # def cost_matrix_fn(self, x0, x1):
+    #         return torch.cdist(x0, x1) ** 2
 
     def F(self, x, v):
         return self.metric_model(x, v)
@@ -84,11 +84,11 @@ class EmbedNetTrainBase(ModelBase):
         loss_embed, loss_geo = 0, 0
 
         for i in range(x0.shape[0]):
-            t, xt, dxt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i],
+            t, xt, dxt, log_etat = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i],
                                                                                 ot_sample=self.config.ot_in_embed)
             xt_free, dxt_free = xt.detach(), dxt.detach()
-            v = torch.randn_like(dxt_free)
-            v /= torch.norm(v, dim=-1, keepdim=True)
+            # v = torch.randn_like(dxt_free)
+            # v /= torch.norm(v, dim=-1, keepdim=True)
 
             #TODO: should we normalize dxt_free too?  Morally yes because we're comparing two homogeneous norms
             loss_embed += self.embed_loss(xt_free, dxt_free)
@@ -119,13 +119,13 @@ class EmbedNetTrainBase(ModelBase):
         x0_, x1_ = x0[i], x1[i]
         
         if ot_sample:
-            x0_, x1_ = self.flow_matcher.ot_sample(x0_, x1_) #Freeze a sample of points from coupling
+            x0_, x1_, _, _ = self.flow_matcher.ot_sampler.sample_plan(x0_, x1_) #Freeze a sample of points from coupling
 
         for j in np.linspace(0, 1, points):
             t = torch.tensor(j)
             t = t.unsqueeze(0).repeat(x0[i].shape[0])
             t.requires_grad_(True)
-            _, xt, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
+            _, xt, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
                                                                                     t=t, ot_sample=False)
             paths.append(xt.detach())
 
@@ -144,13 +144,13 @@ class EmbedNetTrainBase(ModelBase):
         t1 = self.normalize_time(t1)
 
         t = self.normalize_time(t)
-        t = (t - t0) / (t1 - t0) #TODO: confirm this normalization is correct on 2d
+        t = (t - t0) / (t1 - t0) #TODO:
 
-        x0, x1 = self.flow_matcher.ot_sample(x0, x1) #Freeze a sample of points from coupling
+        x0, x1, _, _ = self.flow_matcher.ot_sampler.sample_plan(x0, x1) #Freeze a sample of points from coupling
 
         t = t.unsqueeze(0).repeat(x0.shape[0])
         t.requires_grad_(True)
-        _, xt, _ = self.flow_matcher.sample_location_and_conditional_flow(x0, x1, t0, t1, 
+        _, xt, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0, x1, t0, t1, 
                                                                                 t=t, ot_sample=False)
         self.flow_matcher.sigma = old_sigma
         return xt.detach()

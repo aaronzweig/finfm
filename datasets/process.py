@@ -27,7 +27,7 @@ def process_data(pc_dim, data="zebrafish"):
         adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
         adata.obs['timepoint'] = adata.obs['day']
 
-        incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
+        adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
 
         #TODO: the wrong donor!???? But we downloaded it from https://data.mendeley.com/datasets/hhny5ff7yj/1
 

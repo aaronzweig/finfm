@@ -20,6 +20,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from utils.hydra import *
+from models.metric_models import MetricNetGAGA
+from scripts.run_model import *
+from utils.frozen import *
+from omegaconf import OmegaConf
+
 
 from autoencoder import (
     Autoencoder,
@@ -28,7 +34,6 @@ from autoencoder import (
 )
 from discriminator import Discriminator
 from geodesic_fm import GeodesicFlowMatching
-from off_manifold import make_offmanifold
 from sampling import neg_sample_additive, sampling_rejection
 
 def init_wandb_logger(args):
@@ -188,24 +193,19 @@ def main(args):
     # x_dist = np.load(args.data_path)['dist']
     labels = np.array(adata.obs['day_class'].tolist())
 
-    if args.train_autoencoder:
-        leave_out_idx = np.where(labels != args.test_group)[0]
-        ae_model = train_autoencoder(
-            x[leave_out_idx],
-            x_dist[leave_out_idx][:, leave_out_idx],
-            labels[leave_out_idx],
-            args,
-            device,
-            logger=wandb_logger,
-        )
-    else:
-        raise ValueError("Minimal codebase expects --train_autoencoder.")
+    leave_out_idx = np.where(labels != args.test_group)[0]
+    ae_model = train_autoencoder(
+        x[leave_out_idx],
+        x_dist[leave_out_idx][:, leave_out_idx],
+        labels[leave_out_idx],
+        args,
+        device,
+        logger=wandb_logger,
+    )
 
     x_encodings = encode_data(x, ae_model, device)
 
     train_encodings_leave_out = x_encodings[labels != args.test_group]
-    if args.neg_method != "add":
-        raise ValueError("Minimal script only supports --neg_method add.")
     x_noisy = neg_sample_additive(train_encodings_leave_out, args.noise_levels, seed=args.seed)
     if args.sampling_rejection:
         rejected_mask = sampling_rejection(
@@ -252,51 +252,98 @@ def main(args):
     ae_model.eval()
     wd_model.eval()
     enc_func = lambda x: ae_model(x, normalize=True)
+    def make_offmanifold(encoder, discriminator, disc_factor=5.0):
+
+        def _fn(x):
+            z = encoder(x)
+            penalty = torch.exp(disc_factor * (1 - discriminator.positive_prob(z)))
+            return torch.cat([z, penalty.unsqueeze(1)], dim=1)
+
+        return _fn
     ofm = make_offmanifold(enc_func, wd_model, disc_factor=args.disc_factor)
 
-    gbmodel = GeodesicFlowMatching(
-        func=ofm,
-        encoder=enc_func,
-        input_dim=x.shape[1],
-        hidden_dim=args.hidden_dim,
-        scale_factor=args.scale_factor,
-        embed_t=args.embed_t,
-        num_layers=args.num_layers,
-        n_tsteps=args.n_tsteps,
-        lr=args.lr,
-        weight_decay=args.weight_decay,
-        flow_weight=args.flow_weight,
-        length_weight=args.length_weight,
-    )
+    ###########
+    config = load_config()
+    OmegaConf.set_struct(config, False)
+    config.pc_dim = 100
+    config.embed_max_epochs = 2 #DEBUG
+    adata_train = adata[adata.obs['day_class'].isin([args.start_group, args.end_group])]
+    adata_train.obs['timepoint'] = adata_train.obs['day_class']
+    timepoints = adata_train.obs['timepoint'].unique()
+    train_dataloader = build_paired_dataloader(config, adata_train)
+    freeze_params(ae_model)
+    freeze_params(wd_model)
+    # metric_model = MetricNetGAGA(config=config,
+    #                              encoder=ae_model,
+    #                              discriminator=wd_model)
+    metric_model = MetricNetCFM(config=config)
+    embed_model = build_embed(config, timepoints, metric_model)
+    trainer = build_trainer(config, None, "embed")
+    trainer.fit(model=embed_model, train_dataloaders=train_dataloader)
 
-    trainer = pl.Trainer(
-        max_epochs=args.max_epochs,
-        log_every_n_steps=args.log_every_n_steps,
-        accelerator=device,
-        devices=1,
-        logger=wandb_logger,
-        deterministic=args.deterministic,
-    )
-    trainer.fit(gbmodel, train_dataloaders=loader)
-    gbmodel.to(device)
-    gbmodel.eval()
+    samples = []
+    total = 0
+    t = args.test_group
+    while total < 20000:
+        batch = next(iter(train_dataloader))
+        x = embed_model.sample_geodesic_time(batch, t)
+        samples.append(x)
+        total += x.shape[0]
+    generated_data = torch.cat(samples, dim=0).detach().cpu().numpy()
+    real_data = adata[adata.obs['day_class'] == args.test_group].obsm['X_pca']
+    ###########
 
-    print("finished training")
 
-    ts_eval = torch.linspace(0, 1, args.n_tsteps, device=device)
-    gb_trajs = gbmodel.cc(
-        torch.tensor(start_pts, dtype=torch.float32, device=device),
-        torch.tensor(end_pts, dtype=torch.float32, device=device),
-        ts_eval,
-    )
 
-    print(x.shape, start_pts.shape, end_pts.shape, ts_eval.shape)
 
-    print("sampled traj")
 
-    real_idx = np.where(labels == args.test_group)[0]
-    real_data = x[real_idx]
-    generated_data = gb_trajs.detach().cpu().reshape(-1, gb_trajs.shape[-1]).numpy()
+    # gbmodel = GeodesicFlowMatching(
+    #     func=ofm,
+    #     encoder=enc_func,
+    #     input_dim=x.shape[1],
+    #     hidden_dim=args.hidden_dim,
+    #     scale_factor=args.scale_factor,
+    #     embed_t=args.embed_t,
+    #     num_layers=args.num_layers,
+    #     n_tsteps=args.n_tsteps,
+    #     lr=args.lr,
+    #     weight_decay=args.weight_decay,
+    #     flow_weight=args.flow_weight,
+    #     length_weight=args.length_weight,
+    # )
+
+    # trainer = pl.Trainer(
+    #     max_epochs=args.max_epochs,
+    #     log_every_n_steps=args.log_every_n_steps,
+    #     accelerator=device,
+    #     devices=1,
+    #     logger=wandb_logger,
+    #     deterministic=args.deterministic,
+    # )
+    # trainer.fit(gbmodel, train_dataloaders=loader)
+    # gbmodel.to(device)
+    # gbmodel.eval()
+
+    # print("finished training")
+
+    # ts_eval = torch.linspace(0, 1, args.n_tsteps, device=device)
+    # gb_trajs = gbmodel.cc(
+    #     torch.tensor(start_pts, dtype=torch.float32, device=device),
+    #     torch.tensor(end_pts, dtype=torch.float32, device=device),
+    #     ts_eval,
+    # )
+
+    # print(x.shape, start_pts.shape, end_pts.shape, ts_eval.shape)
+
+    # print("sampled traj")
+
+    # real_idx = np.where(labels == args.test_group)[0]
+    # real_data = x[real_idx]
+    # generated_data = gb_trajs.detach().cpu().reshape(-1, gb_trajs.shape[-1]).numpy()
+
+
+
+
 
     print("now calc wass")
     print(real_data.shape)

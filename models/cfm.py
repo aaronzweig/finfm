@@ -125,13 +125,17 @@ class MetricFlowMatcher(OTFlowMatcher):
         self, 
         geo_fn, 
         cost_matrix_fn,
-        no_ot = False, 
+        method = "exact",
+        reg = -1,
+        reg_m = -1,
         *args, 
         **kwargs):
         super().__init__(*args, **kwargs)
-        self.ot_sampler = GeneralOTPlanSampler(method="exact", cost_matrix_fn=cost_matrix_fn)
+        self.ot_sampler = GeneralOTPlanSampler(method=method,
+                                               reg=reg,
+                                               reg_m=reg_m,
+                                               cost_matrix_fn=cost_matrix_fn)
         self.geo_fn = geo_fn
-        self.no_ot = no_ot
 
     def gamma(self, t, t_min, t_max):
         return (
@@ -149,16 +153,6 @@ class MetricFlowMatcher(OTFlowMatcher):
             + (t - t_min) / (t_max - t_min) * x1
             + self.gamma(t, t_min, t_max) * self.geo_fn(x0, x1, t)
         )  
-
-    def ot_sample(self, x0, x1):
-        if self.no_ot:
-            return x0, x1
-        
-        pi = self.ot_sampler.get_map(x0, x1)
-        i, j = self.ot_sampler.sample_map(pi, x0.shape[0], replace=True)
-        x0, x1 = x0[i], x1[j]
-        
-        return x0, x1
     
     def sample_location_and_conditional_flow(
         self,
@@ -175,12 +169,18 @@ class MetricFlowMatcher(OTFlowMatcher):
         t = t.type_as(x0)
         t = t * (t_max - t_min) + t_min
 
+        r0 = np.zeros(x0.shape[0])
+        r1 = np.zeros(x1.shape[0])
         if ot_sample:
-            x0, x1 = self.ot_sample(x0, x1)
+            x0, x1, r0, r1 = self.ot_sampler.sample_plan(x0, x1)
+        device = x0.device
+        r0 = torch.from_numpy(r0).to(device)
+        r1 = torch.from_numpy(r1).to(device)
 
         eps = self.sample_noise_like(x0)
         xt, ut = self.compute_xt_and_conditional_flow(x0, x1, t, eps, t_min, t_max)
-        return t, xt, ut
+        log_etat = self.compute_log_eta(r0, r1, t, t_min, t_max)
+        return t, xt, ut, log_etat
 
     def compute_xt_and_conditional_flow(self, x0, x1, t, eps, t_min, t_max):
         t = pad_t_like_x(t, x0)
@@ -191,3 +191,8 @@ class MetricFlowMatcher(OTFlowMatcher):
 
         xt, ut = jvp(f, (t,), (torch.ones_like(t),))
         return xt, ut.squeeze(-1)
+    
+    def compute_log_eta(self, r0, r1, t, t_min, t_max):
+        return (t_max - t) / (t_max - t_min) * r0 + (t - t_min) / (
+            t_max - t_min
+        ) * r1

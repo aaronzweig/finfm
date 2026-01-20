@@ -76,7 +76,7 @@ class FlowNetTrainBase(ModelBase):
 
         for i in range(x0.shape[0]):
 
-            t, xt, dxt = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])
+            t, xt, dxt, _ = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i])
 
             vt = self(xt.detach(), t.detach()) #TODO: the main inefficiency, we should only do forward once outside the loop
     

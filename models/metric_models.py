@@ -108,6 +108,34 @@ class MetricNetMFM(MetricNetTrainBase):
         loss = ((1 - self.M(x)) ** 2).mean()
         return loss
 
+class MetricNetGAGA(MetricNetTrainBase):
+    def __init__(
+        self,
+        encoder,
+        discriminator,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.encoder = encoder
+        self.discriminator = discriminator
+        self.disc_factor = 5.0
+
+    def _fn(self, x):
+        z = self.encoder(x)
+        penalty = torch.exp(self.disc_factor * (1 - self.discriminator.positive_prob(z)))
+        return torch.cat([z, penalty.unsqueeze(1)], dim=1)
+
+    def forward(self, x, v):
+        f_x, Jf_x_v = jvp(self._fn, (x,), (v,))
+        return torch.norm(Jf_x_v, dim = -1)
+
+    def _compute_loss(self, batch):
+        return torch.tensor(0.0, device=self.device, requires_grad=True)
+    
+    def configure_optimizers(self):
+        return None
+
 
 class FinslerMixin:
     def __init__(

@@ -23,6 +23,7 @@ class GeneralOTPlanSampler(OTPlanSampler):
     ):
         super().__init__(*args, **kwargs)
         self.cost_matrix_fn = cost_matrix_fn
+        self.method = kwargs['method']
 
     def get_map(self, x0, x1):
 
@@ -46,3 +47,17 @@ class GeneralOTPlanSampler(OTPlanSampler):
                 warnings.warn("Numerical errors in OT plan, reverting to uniform plan.")
             p = np.ones_like(p) / p.size
         return p
+    
+    def sample_plan(self, x0, x1):
+        pi = self.get_map(x0, x1)
+        i, j = self.sample_map(pi, x0.shape[0], replace=True)
+
+        if self.method == "unbalanced":
+            pi_tilde = pi / np.sum(pi)
+            r0 = -np.log(np.sum(pi_tilde, axis = 1)) - np.log(x0.shape[0])
+            r1 = -np.log(np.sum(pi_tilde, axis = 0)) - np.log(x0.shape[0])
+        else:
+            r0 = np.zeros(x0.shape[0])
+            r1 = np.zeros(x1.shape[0])
+        
+        return x0[i], x1[j], r0[i], r1[j]
