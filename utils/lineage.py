@@ -51,10 +51,16 @@ CITE_ADJACENCY = {
 import itertools
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
+#TODO: we currently prune to only have cell_types in the tree
 def incorporate_tree(adata, adj, cell_type_key):
-    cell_types = adata.obs[cell_type_key].unique().tolist()
+    # cell_types = adata.obs[cell_type_key].unique().tolist()
+    # tree_cell_types = list(adj.keys()) + list(itertools.chain(*adj.values()))
+    # cell_types = list(set(cell_types + tree_cell_types))
+
     tree_cell_types = list(adj.keys()) + list(itertools.chain(*adj.values()))
-    cell_types = list(set(cell_types + tree_cell_types))
+    tree_cell_types = list(set(tree_cell_types))
+    adata = adata[adata.obs[cell_type_key].isin(tree_cell_types)]
+    cell_types = tree_cell_types
 
     stoi = {name: i for i, name in enumerate(cell_types)}
     itos = {i: name for i, name in enumerate(cell_types)}
@@ -70,5 +76,5 @@ def incorporate_tree(adata, adj, cell_type_key):
     adata.uns['itos'] = itos
     adata.uns['tree'] = tree
     adata.obs['cell_type_one_hot'] = [stoi[x] for x in adata.obs[cell_type_key]]
-
+    return adata
 

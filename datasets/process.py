@@ -18,7 +18,7 @@ def process_data(pc_dim, data="zebrafish"):
 
         adata.uns['std'] = np.ones((1,pc_dim))
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
-        incorporate_tree(adata, ZEBRAFISH_NEURAL_ADJACENCY, 'cell_type')
+        adata = incorporate_tree(adata, ZEBRAFISH_NEURAL_ADJACENCY, 'cell_type')
 
     elif data == "cite":
         suffix = "cite.h5ad"
