@@ -33,6 +33,14 @@ def process_data(pc_dim, data="zebrafish"):
 
     elif data == "multi":
         pass
+
+    elif data == "cite_gaga":
+        filename = "/home/azweig/projects/finfm/benchmark/flow_matching_minimal/data/cite_100.h5ad"
+        adata = sc.read(filename)
+        adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
+        adata.obs['timepoint'] = adata.obs['day']
+
+        adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
     
     return adata
 

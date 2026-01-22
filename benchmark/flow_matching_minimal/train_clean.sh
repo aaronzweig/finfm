@@ -12,7 +12,7 @@ WANDB_ARGS=${WANDB_ARGS:-}
 python train_clean.py \
     --seed "${SEED}" \
     --deterministic \
-    --max_epochs 1 \
+    --max_epochs 10 \
     --neg_method add \
     --num_samples 128 \
     --batch_size 32 \
@@ -23,7 +23,7 @@ python train_clean.py \
     --disc_batch_size 128 \
     --disc_layer_widths 256 128 64 \
     --disc_factor 10 \
-    --disc_max_epochs 1 \
+    --disc_max_epochs 100 \
     --alpha 8.0 \
     --embed_t \
     --start_group 0 \
@@ -32,7 +32,7 @@ python train_clean.py \
     --range_size 0.3 \
     --data_path "${DATA_PATH}" \
     --train_autoencoder \
-    --ae_max_epochs 1 \
+    --ae_max_epochs 100 \
     --ae_early_stop_patience 50 \
     --ae_latent_dim 3 \
     --ae_batch_norm \

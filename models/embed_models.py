@@ -35,13 +35,19 @@ class EmbedNetTrainBase(ModelBase):
                                               reg_m=self.config.reg_m,
                                               geo_fn = self.geo_fn,
                                               cost_matrix_fn = self.cost_matrix_fn)
+        
+        self.no_learning = self.config.no_learning
 
         # print("DEBUG: skip embed for OT")
 
     def embed_fn(self, x):
+            if self.no_learning:
+                return x
             return self.embed_net(x)
     
     def geo_fn(self, x0, x1, t):
+        if self.no_learning:
+            return 0
         return self.geo_net(torch.cat([x0, x1], dim=-1), t)
     
     def cost_matrix_fn(self, x0, x1):

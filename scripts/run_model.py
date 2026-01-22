@@ -187,6 +187,9 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
         #TODO: hard-coded?
         metric_model.train_dataloader = singleton_dataloader
 
+    if config.no_learning:
+        assert config.metric == "cfm" and not config.finsler.use, "you need to learn a metric"
+        return classifier_model, metric_model, embed_model, flow_model
 
     phase_list =  ['classifier', 'metric', 'embed', 'flow']
     

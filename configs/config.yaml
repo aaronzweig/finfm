@@ -47,6 +47,7 @@ metric: "cfm"
 sigma: 0.0
 ot_in_embed: True
 fast_ot: False
+no_learning: False
 
 method: "exact"
 reg: -1

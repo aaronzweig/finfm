@@ -134,7 +134,8 @@ class MetricFlowMatcher(OTFlowMatcher):
         self.ot_sampler = GeneralOTPlanSampler(method=method,
                                                reg=reg,
                                                reg_m=reg_m,
-                                               cost_matrix_fn=cost_matrix_fn)
+                                               cost_matrix_fn=cost_matrix_fn,
+                                               normalize_cost=True)
         self.geo_fn = geo_fn
 
     def gamma(self, t, t_min, t_max):
