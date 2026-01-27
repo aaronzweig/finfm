@@ -22,6 +22,11 @@ class ModelBase(pl.LightningModule):
         self.config = config
         self.lr = config.lr
         self.warmup_steps = config.warmup_steps
+        # self.mean = torch.tensor(0)
+        # self.std = torch.tensor(1)
+
+        self.register_buffer("mean", torch.zeros(1, self.config.pc_dim))
+        self.register_buffer("std", torch.tensor(1.0))
 
     def get_device(self):
         return self.device
@@ -31,6 +36,12 @@ class ModelBase(pl.LightningModule):
 
     def _compute_loss(self, batch):
         pass
+
+    def normalize(self, x):
+        return (x - self.mean) * self.std
+    
+    def unnormalize(self, x):
+        return x / self.std + self.mean
 
     def training_step(self, batch, batch_idx):
         loss = self._compute_loss(batch)

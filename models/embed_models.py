@@ -36,25 +36,18 @@ class EmbedNetTrainBase(ModelBase):
                                               geo_fn = self.geo_fn,
                                               cost_matrix_fn = self.cost_matrix_fn)
         
-        self.no_learning = self.config.no_learning
-
-        # print("DEBUG: skip embed for OT")
-
     def embed_fn(self, x):
-            if self.no_learning:
+            if self.config.no_learning or self.config.mfm.use_euclidean_ot:
                 return x
             return self.embed_net(x)
     
     def geo_fn(self, x0, x1, t):
-        if self.no_learning:
+        if self.config.no_learning:
             return 0
         return self.geo_net(torch.cat([x0, x1], dim=-1), t)
     
     def cost_matrix_fn(self, x0, x1):
             return torch.cdist(self.embed_fn(x0), self.embed_fn(x1)) ** 2
-
-    # def cost_matrix_fn(self, x0, x1):
-    #         return torch.cdist(x0, x1) ** 2
 
     def F(self, x, v):
         return self.metric_model(x, v)
@@ -71,6 +64,10 @@ class EmbedNetTrainBase(ModelBase):
         x1.to(device)
         t0.to(device)
         t1.to(device)
+        x0 = self.normalize(x0)
+        x1 = self.normalize(x1)
+        t0 = self.normalize_time(t0)
+        t1 = self.normalize_time(t1)
         
         return x0, x1, t0, t1
 
@@ -85,13 +82,12 @@ class EmbedNetTrainBase(ModelBase):
 
     def _compute_loss(self, batch):
         x0, x1, t0, t1 = self._prepare_batch(batch)
-        t0 = self.normalize_time(t0)
-        t1 = self.normalize_time(t1)
         loss_embed, loss_geo = 0, 0
 
         for i in range(x0.shape[0]):
             t, xt, dxt, log_etat = self.flow_matcher.sample_location_and_conditional_flow(x0[i], x1[i], t0[i], t1[i],
-                                                                                ot_sample=self.config.ot_in_embed)
+                                                                                ot_sample=self.config.ot_in_embed,
+                                                                                time_per_batch=self.config.time_per_batch)
             xt_free, dxt_free = xt.detach(), dxt.detach()
             # v = torch.randn_like(dxt_free)
             # v /= torch.norm(v, dim=-1, keepdim=True)
@@ -110,57 +106,58 @@ class EmbedNetTrainBase(ModelBase):
         self.log("train_loss_geo", loss_geo)
         return loss_embed + loss_geo
 
-    def sample_geodesic(self, batch, points = 50, ot_sample=True):
-
-        old_sigma = self.flow_matcher.sigma
-        self.flow_matcher.sigma = 0
-
-        x0, x1, t0, t1 = self._prepare_batch(batch)
-        t0 = self.normalize_time(t0)
-        t1 = self.normalize_time(t1)
-
-        paths = []
-        
-        i = 0
-        x0_, x1_ = x0[i], x1[i]
-        
-        if ot_sample:
-            x0_, x1_, _, _ = self.flow_matcher.ot_sampler.sample_plan(x0_, x1_) #Freeze a sample of points from coupling
-
-        for j in np.linspace(0, 1, points):
-            t = torch.tensor(j)
-            t = t.unsqueeze(0).repeat(x0[i].shape[0])
-            t.requires_grad_(True)
-            _, xt, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0[i], t1[i], 
-                                                                                    t=t, ot_sample=False)
-            paths.append(xt.detach())
-
-        self.flow_matcher.sigma = old_sigma
-        return torch.stack(paths, dim = 0)
-    
-    def sample_geodesic_time(self, batch, t):
+    def _sample_geodesic(self, batch, timepoints, ot_sample=True, weighted=False):
 
         old_sigma = self.flow_matcher.sigma
         self.flow_matcher.sigma = 0
 
         x0, x1, t0, t1 = self._prepare_batch(batch)
         assert x0.shape[0] == 1
-        x0, x1, t0, t1 = x0[0], x1[0], t0[0], t1[0]
-        t0 = self.normalize_time(t0)
-        t1 = self.normalize_time(t1)
 
-        t = self.normalize_time(t)
-        t = (t - t0) / (t1 - t0) #TODO:
+        paths = []
+        weights = []
+        
+        x0_, x1_ = x0[0], x1[0]
+        t0_, t1_ = t0[0], t1[0]
+        r0_, r1_ = None, None
+        if ot_sample:
+            x0_, x1_, r0_, r1_ = self.flow_matcher.ot_sampler.sample_plan(x0_, x1_) #Freeze a sample of points from coupling
 
-        x0, x1, _, _ = self.flow_matcher.ot_sampler.sample_plan(x0, x1) #Freeze a sample of points from coupling
+        for j in timepoints:
+            t = torch.tensor(j)
+            t = t.unsqueeze(0).repeat(x0_.shape[0])
+            t.requires_grad_(True)
+            _, xt, _, log_etat = self.flow_matcher.sample_location_and_conditional_flow(x0_, x1_, t0_, t1_, 
+                                                                                    t=t, 
+                                                                                    r0=r0_,
+                                                                                    r1=r1_,
+                                                                                    ot_sample=False)
+            xt = self.unnormalize(xt)
+            paths.append(xt.detach())
+            weights.append(log_etat.detach())
 
-        t = t.unsqueeze(0).repeat(x0.shape[0])
-        t.requires_grad_(True)
-        _, xt, _, _ = self.flow_matcher.sample_location_and_conditional_flow(x0, x1, t0, t1, 
-                                                                                t=t, ot_sample=False)
         self.flow_matcher.sigma = old_sigma
-        return xt.detach()
+        if weighted:
+            return torch.stack(paths, dim = 0), torch.stack(weights, dim = 0)
+        return torch.stack(paths, dim = 0)
     
+    def sample_geodesic_path(self, batch, num_points, ot_sample=True, weighted=False):
+        timepoints = np.linspace(0, 1, num_points)
+        return self._sample_geodesic(batch, timepoints, ot_sample, weighted)
+
+    def sample_geodesic_time(self, batch, t, ot_sample=True, weighted=False):
+        _, _, t0, t1 = self._prepare_batch(batch)
+        t0 = t0[0]
+        t1 = t1[0]
+        timepoints = torch.Tensor([t])
+        timepoints = self.normalize_time(timepoints)
+        timepoints = (timepoints - t0) / (t1 - t0)
+
+        if weighted:
+            paths, weights = self._sample_geodesic(batch, timepoints, ot_sample, weighted)
+            return paths[0], weights[0]
+        paths = self._sample_geodesic(batch, timepoints, ot_sample, weighted)
+        return paths[0]
 
 class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
     def __init__(

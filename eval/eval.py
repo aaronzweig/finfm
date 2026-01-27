@@ -22,10 +22,10 @@ def geomloss_ot_dist(x, y, a = None, b = None, p=2):
     loss = SamplesLoss(loss="sinkhorn", p=p, blur=.05)
     if a is None:
         a = torch.ones(x.shape[0]) / x.shape[0]
-    a = a.cuda()
+    a = a.cuda().float()
     if b is None:
         b = torch.ones(y.shape[0]) / y.shape[0]
-    b = b.cuda()
+    b = b.cuda().float()
     if p == 2:
         return torch.sqrt(2 * loss(a, x, b, y)).item()
     if p == 1:
@@ -54,7 +54,7 @@ def pot_ot_dist(X, Y, a = None, b = None, p = 1):
     # dist = ot.sinkhorn2(a, b, M, ot_epsilon, method='sinkhorn_log') ** (1/p)
     return dist
 
-def predict(embed_model, adata, t, p=1, num_traj=2000, batch_size=512, library="geomloss"):
+def predict(embed_model, adata, t, p=1, num_traj=2000, batch_size=500, library="geomloss"):
     
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     index = timepoints.index(t)
@@ -68,17 +68,23 @@ def predict(embed_model, adata, t, p=1, num_traj=2000, batch_size=512, library="
     train_dataset = ShufflingDataset(dataset, batch_size) #TODO: replace with ShufflingOTDataset when that actually works
     train_dataloader = DataLoader(train_dataset, batch_size = 1, shuffle=True)
 
+
+    assert num_traj % batch_size == 0, "simpler weighting when batch_size | num_traj"
     samples = []
+    weights = []
     total = 0
-    while total < num_traj:
+    while total < num_traj // batch_size:
         batch = next(iter(train_dataloader))
-        x = embed_model.sample_geodesic_time(batch, t)
+        x, w = embed_model.sample_geodesic_time(batch, t, weighted=True)
         samples.append(x)
-        total += x.shape[0]
-    samples = torch.cat(samples, dim=0)[:num_traj]
+        weights.append(w)
+        total += 1
+    samples = torch.cat(samples, dim=0)
+    weights = torch.cat(weights, dim=0)
+    weights = torch.softmax(weights, dim=0)
 
     true = torch.tensor(adata[adata.obs['timepoint'] == t].obsm['X_pca']).to(embed_model.device)
     
-    emp_dist = ot_dist(samples, true, None, None, p=p, library=library)
+    emp_dist = ot_dist(samples, true, weights, None, p=p, library=library)
 
     return emp_dist

@@ -36,6 +36,7 @@ class ClassifierNetTrainBase(ModelBase):
         x, y = batch
         x.to(device)
         y.to(device)
+        x = self.normalize(x)
 
         return x, y
 

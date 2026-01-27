@@ -183,6 +183,14 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
     embed_model = build_embed(config, timepoints, metric_model)
     flow_model = build_flow(config, timepoints, embed_model)
 
+    if config.normalize:
+        X = singleton_dataloader.dataset.tensors[0]
+        mean = torch.mean(X, dim=0, keepdim = True)
+        std = torch.max(torch.std(X, dim=0))
+        for model in [classifier_model, metric_model, embed_model, flow_model]:
+            model.mean = mean
+            model.std = std
+
     if config.metric == "mfm":
         #TODO: hard-coded?
         metric_model.train_dataloader = singleton_dataloader

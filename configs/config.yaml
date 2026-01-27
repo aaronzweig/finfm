@@ -28,6 +28,7 @@ num_freq: 32
 
 rescale: 0.5
 skip: False
+normalize: True
 
 # Debug settings
 force_cpu: False
@@ -48,6 +49,7 @@ sigma: 0.0
 ot_in_embed: True
 fast_ot: False
 no_learning: False
+time_per_batch: 4
 
 method: "exact"
 reg: -1
@@ -58,6 +60,7 @@ mfm:
   kappa: 1.0
   alpha: 1.0
   epsilon: 1e-2
+  use_euclidean_ot: False
 
 finsler:
   use: False

@@ -162,21 +162,30 @@ class MetricFlowMatcher(OTFlowMatcher):
         t_min,
         t_max,
         t=None,
+        r0=None,
+        r1=None,
         ot_sample=True,
+        time_per_batch=1,
     ):
-        if t is None:
-            t = torch.rand(x0.shape[0], requires_grad=True)
-
-        t = t.type_as(x0)
-        t = t * (t_max - t_min) + t_min
-
-        r0 = np.zeros(x0.shape[0])
-        r1 = np.zeros(x1.shape[0])
+        
+        if r0 is None:
+            r0 = np.zeros(x0.shape[0])
+        if r1 is None:
+            r1 = np.zeros(x1.shape[0])
         if ot_sample:
             x0, x1, r0, r1 = self.ot_sampler.sample_plan(x0, x1)
-        device = x0.device
-        r0 = torch.from_numpy(r0).to(device)
-        r1 = torch.from_numpy(r1).to(device)
+        r0 = torch.from_numpy(r0).to(x0.device)
+        r1 = torch.from_numpy(r1).to(x0.device)
+
+        x0 = x0.repeat((time_per_batch, 1))
+        x1 = x1.repeat((time_per_batch, 1))
+        r0 = r0.repeat((time_per_batch,))
+        r1 = r1.repeat((time_per_batch,))
+
+        if t is None:
+            t = torch.rand(x0.shape[0], requires_grad=True)
+        t = t.type_as(x0)
+        t = t * (t_max - t_min) + t_min
 
         eps = self.sample_noise_like(x0)
         xt, ut = self.compute_xt_and_conditional_flow(x0, x1, t, eps, t_min, t_max)

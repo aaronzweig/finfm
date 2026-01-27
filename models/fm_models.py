@@ -64,14 +64,16 @@ class FlowNetTrainBase(ModelBase):
         x1.to(device)
         t0.to(device)
         t1.to(device)
+        x0 = self.normalize(x0)
+        x1 = self.normalize(x1)
+        t0 = self.normalize_time(t0)
+        t1 = self.normalize_time(t1)
         
         return x0, x1, t0, t1
 
     def _compute_loss(self, batch):
 
         x0, x1, t0, t1 = self._prepare_batch(batch)
-        t0 = self.normalize_time(t0)
-        t1 = self.normalize_time(t1)
         loss = 0
 
         for i in range(x0.shape[0]):
@@ -88,6 +90,7 @@ class FlowNetTrainBase(ModelBase):
 
         device = self.get_device()
 
+        x = self.normalize(x)
         t0 = self.normalize_time(t0)
         t1 = self.normalize_time(t1)
     
@@ -99,6 +102,9 @@ class FlowNetTrainBase(ModelBase):
                 x[indices].float().to(device),
                 t_span=torch.linspace(t0, t1, steps),
             ).cpu()
+
+        traj = [self.unnormalize(x) for x in traj]
+        traj = torch.stack(traj, dim = 0)
 
         return traj
 

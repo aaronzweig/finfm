@@ -96,6 +96,25 @@ def sample_disk(size, d):
     tree[2,3] = 1
     return x, y, t, tree
 
+def sample_growth(size, d):
+    sizes = [size//5] * 5
+    sigma = 0.1
+    assert d == 2
+
+    x0 = sigma * np.random.normal(size=(sizes[0], d)) + np.array([[0, 0]])
+    x1 = sigma * np.random.normal(size=(sizes[1], d)) + np.array([[0.5, 0]])
+    x2 = sigma * np.random.normal(size=(sizes[2], d)) + np.array([[0, 0]])
+    x3 = sigma * np.random.normal(size=(sizes[3], d)) + np.array([[0, -0.5]])
+    x4 = sigma * np.random.normal(size=(sizes[4], d)) + np.array([[0.5, -0.5]])
+
+    x = np.concatenate([x0, x1, x2, x3, x4], axis = 0)
+    y = np.repeat([0,1,0,2,3], size//5)
+    t = np.repeat([0,0,1,1,1], size//5)
+    tree = np.zeros((4,4))
+    tree[1,2] = 1
+    tree[1,3] = 1
+    return x, y, t, tree
+
 def sample_points(size, d):
     sizes = [size//3] * 3
 

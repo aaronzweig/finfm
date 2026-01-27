@@ -19,8 +19,9 @@ class MetricNetTrainBase(ModelBase):
         device = self.get_device()
 
         x, y = batch
-        x.to(device)
-        y.to(device)
+        x = x.to(device)
+        y = y.to(device)
+        x = self.normalize(x)
 
         return x, y
 
@@ -81,8 +82,9 @@ class MetricNetMFM(MetricNetTrainBase):
         with torch.no_grad():
 
             data_to_fit = []
-            for batch, *_ in self.train_dataloader:
-                data_to_fit.append(batch.detach().cpu())
+            for batch in self.train_dataloader:
+                x, y = self._prepare_batch(batch)
+                data_to_fit.append(x.detach().cpu())
             data_to_fit = torch.cat(data_to_fit)
 
             print("Fitting Clustering model...")
@@ -120,6 +122,7 @@ class MetricNetGAGA(MetricNetTrainBase):
         self.encoder = encoder
         self.discriminator = discriminator
         self.disc_factor = 5.0
+        print("TODO: GAGA needs to handle input normalization")
 
     def _fn(self, x):
         z = self.encoder(x)
