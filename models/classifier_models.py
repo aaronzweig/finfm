@@ -26,7 +26,9 @@ class ClassifierNetTrainBase(ModelBase):
         self.dummy_prior = self.config.dummy_prior
         self.dummy_kl_weight = self.config.dummy_kl_weight
 
-    def forward(self, x):
+    def forward(self, x, normalize=False):
+        if normalize:
+            x = self.normalize(x)
         return self.classifier_net(x)
     
     def _prepare_batch(self, batch):

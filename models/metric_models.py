@@ -4,7 +4,7 @@ import numpy as np
 from .base_model import *
 from utils.frozen import *
 import torch.nn.functional as F
-from torch.func import jvp
+from torch.func import jvp, vjp
 
 class MetricNetTrainBase(ModelBase):
     def __init__(
@@ -92,7 +92,8 @@ class MetricNetMFM(MetricNetTrainBase):
 
             clusters = self.clustering_model.cluster_centers_
 
-            self.C = torch.tensor(clusters, dtype=torch.float32).to(self.device)
+            C = torch.tensor(clusters, dtype=torch.float32).to(self.device)
+            self.register_buffer("C", C)
             labels = self.clustering_model.labels_
             sigmas = np.zeros((self.K, 1))
 
@@ -101,9 +102,10 @@ class MetricNetMFM(MetricNetTrainBase):
                 variance = ((points - clusters[k]) ** 2).mean(axis=0)
                 sigmas[k, :] = np.sqrt(variance.mean())
 
-            self.lamda = torch.tensor(
+            lamda = torch.tensor(
                 0.5 / (self.kappa * sigmas + 1e-8) ** 2, dtype=torch.float32
             ).to(self.device)
+            self.register_buffer("lamda", lamda)
 
     def _compute_loss(self, batch):
         x, y = self._prepare_batch(batch)
@@ -122,7 +124,7 @@ class MetricNetGAGA(MetricNetTrainBase):
         self.encoder = encoder
         self.discriminator = discriminator
         self.disc_factor = 5.0
-        print("TODO: GAGA needs to handle input normalization")
+        print("TODO: GAGA needs to handle input normalization?")
 
     def _fn(self, x):
         z = self.encoder(x)
@@ -176,17 +178,37 @@ class FinslerMixin:
         diag = 1 / (p + self.eps)
         return diag
     
-    #TODO: verify the shapes and implementation makes sense
-    def forward(self, x, v):
-        riemann_term = super().forward(x, v)
-        f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
+    # def forward(self, x, v):
+    #     riemann_term = super().forward(x, v)
+    #     f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
         
+    #     u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
+
+    #     # D = self.fisher_rao(x)
+    #     D = torch.ones_like(f_x)
+
+    #     finsler_term = torch.sum(Jf_x_v * D * u, dim=-1)
+    #     return riemann_term + self.lamb * F.relu(finsler_term)
+
+    def riemann_norm(self, x, v):
+        return super().forward(x, v)
+
+    def forward(self, x, v):
+        riemann_term = self.riemann_norm(x, v)
+        f_x = self.classifier_fn(x)
+
         u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
 
-        # D = self.fisher_rao(x)
-        D = torch.ones_like(f_x)
+        _, vjp_fn = vjp(self.classifier_fn, x) 
+        h = vjp_fn(u)[0]
 
-        finsler_term = torch.sum(Jf_x_v * D * u, dim=-1)
+        #Crummy approximation to the dual norm
+        h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1) ** 2
+        h = h * h_scale.unsqueeze(-1)
+        
+        # D = self.fisher_rao(x)
+
+        finsler_term = torch.sum(v * h, dim=-1)
         return riemann_term + self.lamb * F.relu(finsler_term)
 
 class FinslerCFM(FinslerMixin, MetricNetCFM):

@@ -1,0 +1,5 @@
+# @package _global_
+project: "cite"
+dataset: "cite"
+pc_dim: 100
+num_classes: 7

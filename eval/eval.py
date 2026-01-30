@@ -32,12 +32,6 @@ def geomloss_ot_dist(x, y, a = None, b = None, p=2):
         return loss(a, x, b, y).item()
     return None
 
-# def ot_dist(x, y):
-#     x = x.cuda()
-#     y = y.cuda()
-#     loss = SamplesLoss(loss="sinkhorn", p=2, blur=.05)
-#     return torch.sqrt(2 * loss(x, y)).item()
-
 import ot
 def pot_ot_dist(X, Y, a = None, b = None, p = 1):
     if a is None:
@@ -54,20 +48,13 @@ def pot_ot_dist(X, Y, a = None, b = None, p = 1):
     # dist = ot.sinkhorn2(a, b, M, ot_epsilon, method='sinkhorn_log') ** (1/p)
     return dist
 
-def predict(embed_model, adata, t, p=1, num_traj=2000, batch_size=500, library="geomloss"):
-    
-    timepoints = sorted(adata.obs['timepoint'].unique().tolist())
-    index = timepoints.index(t)
-        
-    t0 = timepoints[index-1]
-    t1 = timepoints[index+1]
+def predict(embed_model, adata, t0, t, t1, p=1, num_traj=2000, batch_size=500, library="geomloss"):
 
     adata_obs = adata[adata.obs['timepoint'].isin([t0, t1])]
 
     dataset = extract_paired_dataset(adata_obs)
     train_dataset = ShufflingDataset(dataset, batch_size) #TODO: replace with ShufflingOTDataset when that actually works
     train_dataloader = DataLoader(train_dataset, batch_size = 1, shuffle=True)
-
 
     assert num_traj % batch_size == 0, "simpler weighting when batch_size | num_traj"
     samples = []

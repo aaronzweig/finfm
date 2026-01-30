@@ -24,6 +24,7 @@ from models.ema import *
 from models.classifier_models import *
 from datasets.process import *
 from omegaconf import OmegaConf
+from eval.eval import *
     
 def build_classifier(config):
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
@@ -241,3 +242,42 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
         freeze_params(model)
 
     return classifier_model, metric_model, embed_model, flow_model
+
+def remove_all_forward_hooks(model):
+    for module in model.modules():
+        module._forward_hooks.clear()
+
+def train(config, project):
+
+    adata = process_data(pc_dim=config.pc_dim, data=config.dataset)
+    timepoints = sorted(adata.obs['timepoint'].unique().tolist())
+    tree = adata.uns['tree']
+
+    t0, t1 = timepoints[config.t0_index], timepoints[config.t1_index]
+
+    adata = adata[(adata.obs['timepoint'] >= t0) & (adata.obs['timepoint'] <= t1)]
+    adata_train = adata[adata.obs['timepoint'].isin([t0, t1])]
+
+    singleton_dataloader = build_singleton_dataloader(config, adata_train)
+    paired_dataloader = build_paired_dataloader(config, adata_train)
+
+    classifier_model, metric_model, embed_model, flow_model = run_full_model(config=config,
+                                                                            project=project,
+                                                                            singleton_dataloader=singleton_dataloader,
+                                                                            paired_dataloader=paired_dataloader,
+                                                                            timepoints=timepoints,
+                                                                            tree=tree)
+
+    remove_all_forward_hooks(classifier_model)
+    remove_all_forward_hooks(metric_model)
+    remove_all_forward_hooks(embed_model)
+    remove_all_forward_hooks(flow_model)
+
+    w1_scores = []
+    for index in range(config.t0_index + 1, config.t1_index):
+        t = timepoints[index]
+        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="geomloss")
+        w1_scores.append(w1)
+    w1_scores = torch.tensor(w1_scores)
+    
+    return classifier_model, metric_model, embed_model, flow_model, w1_scores

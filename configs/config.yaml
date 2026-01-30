@@ -1,15 +1,15 @@
 defaults:
   - _self_
+  - dataset: "zebrafish"
 
-# Dataset specific settings
 pc_dim: -1
 num_classes: -1
 
 # Trainer settings
-classifier_max_epochs: 500
-metric_max_epochs: 1000
+classifier_max_epochs: 1000
+metric_max_epochs: 2
 embed_max_epochs: 3000
-flow_max_epochs: 10000
+flow_max_epochs: 2
 gradient_clip_val: 0
 warmup_steps: 0
 
@@ -56,10 +56,10 @@ reg: -1
 reg_m: -1
 
 mfm:
-  K: 500
-  kappa: 1.0
+  K: 150
+  kappa: 1.5
   alpha: 1.0
-  epsilon: 1e-2
+  epsilon: 1e-1
   use_euclidean_ot: False
 
 finsler:
