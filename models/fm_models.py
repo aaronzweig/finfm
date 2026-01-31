@@ -85,6 +85,12 @@ class FlowNetTrainBase(ModelBase):
             loss += torch.mean((vt - dxt.detach()) ** 2)
 
         return loss / x0.shape[0]
+    
+    def training_step(self, batch, batch_idx):
+        loss = self._compute_loss(batch)
+
+        self.log("train_loss_flow", loss)
+        return loss
 
     def sample_traj(self, x, t0, t1, num_samples, steps=2000):
 

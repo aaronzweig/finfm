@@ -24,6 +24,12 @@ class MetricNetTrainBase(ModelBase):
         x = self.normalize(x)
 
         return x, y
+    
+    def training_step(self, batch, batch_idx):
+        loss = self._compute_loss(batch)
+
+        self.log("train_loss_metric", loss)
+        return loss
 
 class MetricNetCFM(MetricNetTrainBase):
     def __init__(

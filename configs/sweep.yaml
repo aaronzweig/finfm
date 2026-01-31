@@ -1,0 +1,54 @@
+# W&B Sweep configuration for finfm hyperparameter search
+#
+# Usage (single command):
+#   python -m scripts.sweep                           # unlimited trials
+#   python -m scripts.sweep --count 20                # cap at 20 trials
+#   python -m scripts.sweep --dataset cite --count 10 # different dataset
+#
+# For conditional sweeps (e.g. only sweep mfm.kappa when metric=mfm):
+#   W&B doesn't support this natively. The Bayesian optimizer will learn
+#   that MFM-specific params are irrelevant for CFM runs.
+#   Alternatively, create separate sweep configs per metric:
+#     configs/sweep_cfm.yaml   (no mfm.* params)
+#     configs/sweep_mfm.yaml   (no cfm-only params)
+
+method: random
+
+metric:
+  name: w1_avg
+  goal: minimize
+
+parameters:
+  # --- Core method choice ---
+  metric:
+    values: ["cfm", "mfm"]
+
+  # --- Finsler settings (only active when finsler.use=true) ---
+  finsler.use:
+    values: [true, false]
+  finsler.lamb:
+    distribution: uniform
+    min: 0.05
+    max: 1.0
+  dummy_kl_weight:
+    distribution: uniform
+    min: 0.01
+    max: 0.5
+
+  # --- MFM settings (only active when metric=mfm) ---
+  mfm.kappa:
+    distribution: uniform
+    min: 0.5
+    max: 3.0
+  mfm.K:
+    values: [50, 100, 150, 200]
+  mfm.epsilon:
+    distribution: log_uniform_values
+    min: 0.01
+    max: 1.0
+
+  # --- Training settings ---
+  lr:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 1e-2

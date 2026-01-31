@@ -26,6 +26,11 @@ class ClassifierNetTrainBase(ModelBase):
         self.dummy_prior = self.config.dummy_prior
         self.dummy_kl_weight = self.config.dummy_kl_weight
 
+    #Expects input from raw data
+    def classify(self, x): 
+        x = self.normalize(x)
+        return self.classifier_net(x)
+
     def forward(self, x, normalize=False):
         if normalize:
             x = self.normalize(x)
@@ -64,3 +69,8 @@ class ClassifierNetTrainBase(ModelBase):
             self.log("train_kl", kl_loss.detach())
         return loss
         
+    def training_step(self, batch, batch_idx):
+        loss = self._compute_loss(batch)
+
+        self.log("train_loss_classifier", loss)
+        return loss

@@ -177,9 +177,16 @@ def build_paired_dataloader(config, adata):
     train_dataloader = DataLoader(train_dataset, batch_size = config.loader_batch_size, shuffle=True)
     return train_dataloader
 
-def run_full_model(config, project, singleton_dataloader, paired_dataloader, timepoints, tree):
-    
-    classifier_model = build_classifier(config)    
+def run_full_model(config, project, singleton_dataloader, paired_dataloader, timepoints, tree, wandb_logger=None):
+    """Train all four phases (classifier, metric, embed, flow).
+
+    Args:
+        wandb_logger: Optional external WandbLogger (e.g. from sweep.py).
+            If provided, this single logger is reused for every phase — no
+            per-phase wandb.init() calls are made.  When None, behaviour
+            falls back to config.use_wandb (notebook path with per-phase runs).
+    """
+    classifier_model = build_classifier(config)
     metric_model = build_metric(config, tree, classifier_model)
     embed_model = build_embed(config, timepoints, metric_model)
     flow_model = build_flow(config, timepoints, embed_model)
@@ -201,42 +208,38 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
         return classifier_model, metric_model, embed_model, flow_model
 
     phase_list =  ['classifier', 'metric', 'embed', 'flow']
-    
+
     for i, phase in enumerate(phase_list):
 
         print(f"Running phase {phase}:.......")
 
-        if config.use_wandb:
+        # Determine the logger for this phase
+        if wandb_logger is not None:
+            # External logger (sweep path) — reuse the single run
+            phase_logger = wandb_logger
+        elif config.use_wandb:
+            # Notebook path — separate wandb run per phase
             config_dict = OmegaConf.to_container(config, resolve=True, throw_on_missing=True)
-            wandb_logger = WandbLogger(project=project, name=phase, log_model=True)
+            phase_logger = WandbLogger(project=project, name=phase, log_model=True)
             wandb.init(config=config_dict, project=project, reinit=True)
-            # config = wandb.config
         else:
-            wandb_logger = False 
-        
-        
+            phase_logger = False
+
         ### train ###
-        trainer = build_trainer(config, wandb_logger, phase)
+        trainer = build_trainer(config, phase_logger, phase)
         model = {'classifier': classifier_model,
                  'metric': metric_model,
                  'embed': embed_model,
                  'flow': flow_model}[phase]
-        
+
         train_dataloader = singleton_dataloader if phase in ["classifier", "metric"] else paired_dataloader
 
-        if config.use_wandb:
-            # wandb_logger.watch(model, log="all")
-            wandb_logger.watch(model, log=None)
         trainer.fit(model=model, train_dataloaders=train_dataloader)
-        if config.use_wandb:
+
+        # Cleanup per-phase wandb run (notebook path only)
+        if wandb_logger is None and config.use_wandb:
             wandb.finish()
 
-            try:
-                import wandb as _wandb
-                _wandb.unwatch(model)
-            except Exception:
-                pass
-            
         ### cleanup ###
         model.eval()
         freeze_params(model)
@@ -247,7 +250,7 @@ def remove_all_forward_hooks(model):
     for module in model.modules():
         module._forward_hooks.clear()
 
-def train(config, project):
+def train(config, project, wandb_logger=None):
 
     adata = process_data(pc_dim=config.pc_dim, data=config.dataset)
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
@@ -266,7 +269,8 @@ def train(config, project):
                                                                             singleton_dataloader=singleton_dataloader,
                                                                             paired_dataloader=paired_dataloader,
                                                                             timepoints=timepoints,
-                                                                            tree=tree)
+                                                                            tree=tree,
+                                                                            wandb_logger=wandb_logger)
 
     remove_all_forward_hooks(classifier_model)
     remove_all_forward_hooks(metric_model)
@@ -276,7 +280,7 @@ def train(config, project):
     w1_scores = []
     for index in range(config.t0_index + 1, config.t1_index):
         t = timepoints[index]
-        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="geomloss")
+        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="pot")
         w1_scores.append(w1)
     w1_scores = torch.tensor(w1_scores)
     

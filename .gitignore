@@ -7,3 +7,4 @@ __pycache__
 lightning_logs
 checkpoints_minimal
 plots_minimal
+CLAUDE.md

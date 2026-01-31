@@ -1,35 +1,63 @@
-import numpy as np
+import argparse
+import os
+import yaml
 import torch
 import wandb
-import os
-from torch.utils.data import DataLoader
-import pytorch_lightning as pl
-
-import os 
-import sys
+from functools import partial
+from omegaconf import OmegaConf
 from pytorch_lightning.loggers import WandbLogger
 
-from scripts.run_model import *
-from eval.eval import *
-import time
-import hydra
-from omegaconf import DictConfig, OmegaConf
-import wandb
+from scripts.run_model import train
+from utils.hydra import load_config
 
-@hydra.main(config_path="conf", config_name="config", version_base=None)
-def main(cfg: DictConfig):
-    # 1. Setup WandB (Crucial for sweeps to group runs)
-    wandb.init(
-        project=cfg.project,
-        entity="az831-new-york-genome-center",
-        config=OmegaConf.to_container(cfg, resolve=True),
-        reinit=True
-    )
-    
-    _, _, _, _, w1_scores = train(cfg, cfg.project)
-    
-    # 4. Log final metric for the sweep to target
-    wandb.log({"w1_avg_error": torch.mean(w1_scores)}) 
+
+def run_trial(dataset):
+    """Single sweep trial — called by wandb.agent for each sampled config."""
+    run = wandb.init(reinit=True)
+
+    # Build base config from Hydra, then overlay wandb's sampled hyperparams
+    cfg = load_config(overrides=[f"dataset={dataset}"])
+    OmegaConf.set_struct(cfg, False)
+    cfg.use_wandb = False
+    for key, value in dict(wandb.config).items():
+        OmegaConf.update(cfg, key, value)
+
+    wandb_logger = WandbLogger(experiment=run)
+    _, _, _, _, w1_scores = train(cfg, cfg.project, wandb_logger=wandb_logger)
+
+    # Log per-holdout-timepoint W1 scores and the average
+    # for i, score in enumerate(w1_scores):
+    #     wandb.log({f"w1_t{i}": score.item()})
+    avg = torch.mean(w1_scores).item()
+    wandb.log({"w1_avg": avg})
+    wandb.summary["w1_avg"] = avg
+
+    wandb.finish()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Register a W&B sweep and run the agent.")
+    parser.add_argument("--sweep_config", default="configs/sweep.yaml",
+                        help="Path to the W&B sweep YAML config")
+    parser.add_argument("--dataset", default="zebrafish",
+                        help="Dataset config to use (e.g. zebrafish, cite)")
+    parser.add_argument("--count", type=int, default=None,
+                        help="Max number of sweep trials (default: unlimited)")
+    args = parser.parse_args()
+
+    # Load sweep config; drop command/program since wandb.agent calls run_trial directly
+    with open(args.sweep_config) as f:
+        sweep_config = yaml.safe_load(f)
+    sweep_config.pop("command", None)
+    sweep_config.pop("program", None)
+
+    # Resolve project name from the dataset config
+    base_cfg = load_config(overrides=[f"dataset={args.dataset}"])
+    project = base_cfg.project
+
+    sweep_id = wandb.sweep(sweep_config, project=project)
+    wandb.agent(sweep_id, function=partial(run_trial, args.dataset), count=args.count)
+
 
 if __name__ == "__main__":
     main()

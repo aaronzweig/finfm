@@ -7,7 +7,7 @@ num_classes: -1
 
 # Trainer settings
 classifier_max_epochs: 1000
-metric_max_epochs: 2
+metric_max_epochs: 3000
 embed_max_epochs: 3000
 flow_max_epochs: 2
 gradient_clip_val: 0
