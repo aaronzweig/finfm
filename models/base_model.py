@@ -38,10 +38,10 @@ class ModelBase(pl.LightningModule):
         pass
 
     def normalize(self, x):
-        return (x - self.mean) * self.std
+        return (x - self.mean) / self.std
     
     def unnormalize(self, x):
-        return x / self.std + self.mean
+        return x * self.std + self.mean
 
     def training_step(self, batch, batch_idx):
         loss = self._compute_loss(batch)

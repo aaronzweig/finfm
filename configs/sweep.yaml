@@ -29,7 +29,7 @@ parameters:
   finsler.lamb:
     distribution: uniform
     min: 0.05
-    max: 1.0
+    max: 0.5
   dummy_kl_weight:
     distribution: uniform
     min: 0.01
@@ -41,14 +41,14 @@ parameters:
     min: 0.5
     max: 3.0
   mfm.K:
-    values: [50, 100, 150, 200]
+    values: [150, 200]
   mfm.epsilon:
     distribution: log_uniform_values
     min: 0.01
-    max: 1.0
+    max: 0.1
 
   # --- Training settings ---
   lr:
     distribution: log_uniform_values
     min: 1e-4
-    max: 1e-2
+    max: 1e-3
