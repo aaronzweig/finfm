@@ -209,8 +209,8 @@ class FinslerMixin:
         h = vjp_fn(u)[0]
 
         #Crummy approximation to the dual norm
-        h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1) ** 2
-        h = h * h_scale.unsqueeze(-1)
+        # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1) ** 2
+        # h = h * h_scale.unsqueeze(-1)
         
         # D = self.fisher_rao(x)
 
