@@ -11,14 +11,17 @@ from scripts.run_model import train
 from utils.hydra import load_config
 
 
-def run_trial(dataset):
+def run_trial(dataset, overrides=None):
     """Single sweep trial — called by wandb.agent for each sampled config."""
     run = wandb.init(reinit=True)
 
-    # Build base config from Hydra, then overlay wandb's sampled hyperparams
+    # Build base config from Hydra, apply fixed CLI overrides, then overlay wandb's sampled params
     cfg = load_config(overrides=[f"dataset={dataset}"])
     OmegaConf.set_struct(cfg, False)
     cfg.use_wandb = False
+    for o in (overrides or []):
+        key, value = o.split("=", 1)
+        OmegaConf.update(cfg, key, yaml.safe_load(value))
     for key, value in dict(wandb.config).items():
         OmegaConf.update(cfg, key, value)
 
@@ -43,6 +46,8 @@ def main():
                         help="Dataset config to use (e.g. zebrafish, cite)")
     parser.add_argument("--count", type=int, default=None,
                         help="Max number of sweep trials (default: unlimited)")
+    parser.add_argument("overrides", nargs="*",
+                        help="Fixed config overrides applied every trial (e.g. t0_index=1 lr=5e-4)")
     args = parser.parse_args()
 
     # Load sweep config; drop command/program since wandb.agent calls run_trial directly
@@ -55,8 +60,15 @@ def main():
     base_cfg = load_config(overrides=[f"dataset={args.dataset}"])
     project = base_cfg.project
 
+    # Validate that all override keys exist in config to catch typos early
+    _MISSING = object()
+    for o in (args.overrides or []):
+        key, _ = o.split("=", 1)
+        if OmegaConf.select(base_cfg, key, default=_MISSING) is _MISSING:
+            parser.error(f"override key '{key}' not found in config")
+
     sweep_id = wandb.sweep(sweep_config, project=project)
-    wandb.agent(sweep_id, function=partial(run_trial, args.dataset), count=args.count)
+    wandb.agent(sweep_id, function=partial(run_trial, args.dataset, args.overrides), count=args.count)
 
 
 if __name__ == "__main__":

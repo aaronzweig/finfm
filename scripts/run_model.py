@@ -194,7 +194,7 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
     if config.normalize:
         X = singleton_dataloader.dataset.tensors[0]
         mean = torch.mean(X, dim=0, keepdim = True)
-        std = torch.max(torch.std(X, dim=0))
+        std = torch.max(torch.std(X, dim=0)) * np.sqrt(config.pc_dim)
         for model in [classifier_model, metric_model, embed_model, flow_model]:
             model.mean = mean
             model.std = std
@@ -234,7 +234,15 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
 
         train_dataloader = singleton_dataloader if phase in ["classifier", "metric"] else paired_dataloader
 
+        # Log gradients to wandb for this phase
+        if phase_logger:
+            phase_logger.watch(model, log="gradients", log_freq=50)
+
         trainer.fit(model=model, train_dataloaders=train_dataloader)
+
+        # Stop watching before the next phase (or cleanup)
+        if phase_logger:
+            wandb.unwatch(model)
 
         # Cleanup per-phase wandb run (notebook path only)
         if wandb_logger is None and config.use_wandb:

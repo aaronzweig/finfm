@@ -101,12 +101,14 @@ class EmbedNetTrainBase(ModelBase):
             # loss_embed += self.embed_loss(xt_free, v)
             loss_geo += self.geo_loss(xt, dxt)
 
-        if self.embed_loss_scalar == -1:
-            self.embed_loss_scalar = (loss_embed / x0.shape[0]).detach()        
-        if self.geo_loss_scalar == -1:
-            self.geo_loss_scalar = (loss_geo / x0.shape[0]).detach()
+        # if self.embed_loss_scalar == -1:
+        #     self.embed_loss_scalar = (loss_embed / x0.shape[0]).detach()        
+        # if self.geo_loss_scalar == -1:
+        #     self.geo_loss_scalar = (loss_geo / x0.shape[0]).detach()
 
-        return loss_embed / x0.shape[0] / self.embed_loss_scalar, loss_geo / x0.shape[0] / self.geo_loss_scalar
+        # return loss_embed / x0.shape[0] / self.embed_loss_scalar, loss_geo / x0.shape[0] / self.geo_loss_scalar
+
+        return loss_embed / x0.shape[0], loss_geo / x0.shape[0]
 
     def training_step(self, batch, batch_idx):
         loss_embed, loss_geo = self._compute_loss(batch)
