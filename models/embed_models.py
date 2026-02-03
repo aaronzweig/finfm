@@ -36,10 +36,6 @@ class EmbedNetTrainBase(ModelBase):
                                               geo_fn = self.geo_fn,
                                               cost_matrix_fn = self.cost_matrix_fn)
         
-        print("DEBUG: trying dumb first loss as scaling for embed")
-        self.embed_loss_scalar = torch.tensor(-1)
-        self.geo_loss_scalar = torch.tensor(-1)
-        
     def embed_fn(self, x):
             if self.config.no_learning or self.config.mfm.use_euclidean_ot:
                 return x
@@ -100,13 +96,6 @@ class EmbedNetTrainBase(ModelBase):
             loss_embed += self.embed_loss(xt_free, dxt_free)
             # loss_embed += self.embed_loss(xt_free, v)
             loss_geo += self.geo_loss(xt, dxt)
-
-        # if self.embed_loss_scalar == -1:
-        #     self.embed_loss_scalar = (loss_embed / x0.shape[0]).detach()        
-        # if self.geo_loss_scalar == -1:
-        #     self.geo_loss_scalar = (loss_geo / x0.shape[0]).detach()
-
-        # return loss_embed / x0.shape[0] / self.embed_loss_scalar, loss_geo / x0.shape[0] / self.geo_loss_scalar
 
         return loss_embed / x0.shape[0], loss_geo / x0.shape[0]
 

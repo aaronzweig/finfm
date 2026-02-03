@@ -5,6 +5,8 @@ from .base_model import *
 from utils.frozen import *
 import torch.nn.functional as F
 from torch.func import jvp, vjp
+from torch.distributions import Categorical
+
 
 class MetricNetTrainBase(ModelBase):
     def __init__(
@@ -211,6 +213,9 @@ class FinslerMixin:
         #Crummy approximation to the dual norm
         # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1) ** 2
         # h = h * h_scale.unsqueeze(-1)
+
+        # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1)
+        # ent = torch.sum(-f_x * torch.log(f_x), dim=-1)
         
         # D = self.fisher_rao(x)
 

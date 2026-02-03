@@ -149,6 +149,42 @@ def sample_points(size, d):
     
     return x, y, t, tree
 
+def sample_path(size, d):
+    assert d == 2
+    sizes = [size//5] * 5
+
+    x0 = 0.1 * np.random.normal(size=(sizes[0], d))
+    x1 = 0.1 * np.random.normal(size=(sizes[1], d))
+    x2 = 0.1 * np.random.normal(size=(sizes[2], d))
+    x3 = 0.1 * np.random.normal(size=(sizes[3], d))
+    x4 = 0.1 * np.random.normal(size=(sizes[4], d))
+
+    x0[:,0] -= 1.0
+    x1[:,1] += 1.0
+    x3[:,1] -= 1.0
+    x4[:,0] += 1.0
+    x = np.concatenate([x0, x1, x2, x3, x4], axis=0)
+
+    y0 = np.zeros(x0.shape[0])
+    y1 = np.zeros(x1.shape[0]) + 1
+    y2 = np.zeros(x2.shape[0]) + 2
+    y3 = np.zeros(x3.shape[0]) + 3
+    y4 = np.zeros(x3.shape[0]) + 4
+    y = np.concatenate([y0, y1, y2, y3, y4], axis=0)
+
+    t0 = np.zeros(x0.shape[0])
+    t1 = np.random.choice(3, size = x1.shape[0], p=[0.05, 0.90, 0.05])
+    t2 = np.random.choice(3, size = x2.shape[0], p=[0.05, 0.90, 0.05])
+    t3 = np.random.choice(3, size = x3.shape[0], p=[0.05, 0.90, 0.05])
+    t4 = np.zeros(x4.shape[0]) + 2
+    t = np.concatenate([t0, t1, t2, t3, t4], axis=0)
+
+    tree = np.zeros((5,5))
+    tree[0,1] = 1
+    tree[1,4] = 1
+    
+    return x, y, t, tree
+
 def sample_diamond(size, d):
 
     sizes = [size//4] * 4
@@ -234,7 +270,7 @@ def process_fake_data(size, d, sample_fn, normalize=False):
     x, y, t, tree = sample_fn(size, d)
 
     adata = ad.AnnData(x)
-    adata.obs['timepoint'] = pd.Categorical(t)
+    adata.obs['timepoint'] = t.astype(int)
     adata.obs['gene_target'] = pd.Categorical(["ctrl-inj"] * x.shape[0])
     adata.obs['cell_type'] = pd.Categorical(y)
     adata.obs['cell_type_one_hot'] = adata.obs['cell_type']
