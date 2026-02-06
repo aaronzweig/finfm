@@ -5,20 +5,25 @@ from datasets.dataset import *
 from utils.preprocess import *
 from utils.lineage import *
 
-def process_data(pc_dim, data="zebrafish"):
-    path = "data"
-    if data == "zebrafish": #constrain to neural cells in control
-        suffix = "pairwise_hvg.h5ad"
+def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
+    path = "/home/mingxuanzhang/finfm"
+    if data == "zebrafish":
+        suffix = "zebrafish_neural.h5ad"
         filename = os.path.join(path, suffix)
         adata = load_data(filename)
 
         subset = (adata.obs['gene_target'] == 'ctrl-inj') & (adata.obs['tissue'] == "Central Nervous System")
         adata = adata[subset]
-        sc.tl.pca(adata, n_comps = pc_dim, mask_var = None) #because load_data already filters for hvg + perturbed genes
+        sc.tl.pca(adata, n_comps = pc_dim, mask_var = None)
 
         adata.uns['std'] = np.ones((1,pc_dim))
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
-        adata = incorporate_tree(adata, ZEBRAFISH_NEURAL_ADJACENCY, 'cell_type')
+
+        if use_paga:
+            adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True)
+        else:
+            adj = ZEBRAFISH_NEURAL_ADJACENCY
+        adata = incorporate_tree(adata, adj, 'cell_type')
 
     elif data == "cite":
         suffix = "cite.h5ad"

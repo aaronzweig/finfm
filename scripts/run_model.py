@@ -260,7 +260,7 @@ def remove_all_forward_hooks(model):
 
 def train(config, project, wandb_logger=None):
 
-    adata = process_data(pc_dim=config.pc_dim, data=config.dataset)
+    adata = process_data(pc_dim=config.pc_dim, data=config.dataset, use_paga=True)
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     tree = adata.uns['tree']
 
