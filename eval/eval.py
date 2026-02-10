@@ -66,11 +66,11 @@ def predict(embed_model, adata, t0, t, t1, p=1, num_traj=2000, batch_size=500, l
         samples.append(x)
         weights.append(w)
         total += 1
-    samples = torch.cat(samples, dim=0)
-    weights = torch.cat(weights, dim=0)
+    samples = torch.cat(samples, dim=0).float()
+    weights = torch.cat(weights, dim=0).float()
     weights = torch.softmax(weights, dim=0)
 
-    true = torch.tensor(adata[adata.obs['timepoint'] == t].obsm['X_pca']).to(embed_model.device)
+    true = torch.tensor(adata[adata.obs['timepoint'] == t].obsm['X_pca']).to(embed_model.device).float()
     
     emp_dist = ot_dist(samples, true, weights, None, p=p, library=library)
 

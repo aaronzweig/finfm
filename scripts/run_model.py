@@ -6,6 +6,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from torch.utils.data import WeightedRandomSampler
 
 from torch.utils.data import Dataset, Sampler, DataLoader
 import pytorch_lightning as pl
@@ -30,7 +31,8 @@ def build_classifier(config):
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
                                      output_dim=config.num_classes+1,
                                      hidden_dims=[config.classifier.hidden_dim]*config.classifier.num_layers,
-                                     layer_norm=True)
+                                     layer_norm=True,
+                                     use_spectral_norm=config.classifier.spectral_norm)
 
     classifier_model = ClassifierNetTrainBase(classifier_net=classifier_net, config=config)
     return classifier_model
@@ -157,10 +159,24 @@ def build_trainer(config, wandb_logger, phase):
 def build_singleton_dataloader(config, adata):
     X, y = extract_singleton_dataset(adata)
     train_dataset = TensorDataset(X, y)
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size = config.score_batch_size,
-                                  drop_last=True, 
-                                  shuffle=True)
+    if config.balance_classes:
+
+        class_counts = torch.bincount(y) + 1
+        class_weights = 1.0 / class_counts.float()
+        sample_weights = class_weights[y]
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        train_dataloader = DataLoader(train_dataset, 
+                                      batch_size=config.score_batch_size,
+                                      sampler=sampler)
+    else:
+        train_dataloader = DataLoader(train_dataset,
+                                    batch_size = config.score_batch_size,
+                                    drop_last=True, 
+                                    shuffle=True)
 
     return train_dataloader
 
@@ -207,7 +223,9 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
         assert config.metric == "cfm" and not config.finsler.use, "you need to learn a metric"
         return classifier_model, metric_model, embed_model, flow_model
 
-    phase_list =  ['classifier', 'metric', 'embed', 'flow']
+    # phase_list =  ['classifier', 'metric', 'embed', 'flow']
+    phase_list =  ['classifier', 'metric', 'embed']
+
 
     for i, phase in enumerate(phase_list):
 

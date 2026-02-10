@@ -3,5 +3,5 @@ project: "zebrafish"
 dataset: "zebrafish"
 pc_dim: 100
 num_classes: 17
-t0_index: 2
+t0_index: 1
 t1_index: 4
