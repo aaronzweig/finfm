@@ -14,7 +14,7 @@ def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
 
         subset = (adata.obs['gene_target'] == 'ctrl-inj') & (adata.obs['tissue'] == "Central Nervous System")
         adata = adata[subset]
-        sc.tl.pca(adata, n_comps = pc_dim, mask_var = None) #because load_data already filters for hvg + perturbed genes
+        sc.tl.pca(adata, n_comps = pc_dim, mask_var = None)
 
         adata.uns['std'] = np.ones((1,pc_dim))
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
