@@ -2,6 +2,5 @@
 project: "cite"
 dataset: "cite"
 pc_dim: 100
-num_classes: 7
 t0_index: 0
 t1_index: 2

@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import WeightedRandomSampler
+import random
 
 from torch.utils.data import Dataset, Sampler, DataLoader
 import pytorch_lightning as pl
@@ -138,7 +139,7 @@ def build_trainer(config, wandb_logger, phase):
         max_epochs = config.metric_max_epochs
     elif phase == "embed":
         max_epochs = config.embed_max_epochs
-        callbacks.append(DatasetUpdateCallback())
+        callbacks.append(BestModelCallback("train_loss_geo_embed"))
     elif phase == "flow":
         max_epochs = config.flow_max_epochs
     else:
@@ -194,14 +195,9 @@ def build_paired_dataloader(config, adata):
     return train_dataloader
 
 def run_full_model(config, project, singleton_dataloader, paired_dataloader, timepoints, tree, wandb_logger=None):
-    """Train all four phases (classifier, metric, embed, flow).
 
-    Args:
-        wandb_logger: Optional external WandbLogger (e.g. from sweep.py).
-            If provided, this single logger is reused for every phase — no
-            per-phase wandb.init() calls are made.  When None, behaviour
-            falls back to config.use_wandb (notebook path with per-phase runs).
-    """
+    print(config)
+
     classifier_model = build_classifier(config)
     metric_model = build_metric(config, tree, classifier_model)
     embed_model = build_embed(config, timepoints, metric_model)
@@ -278,7 +274,13 @@ def remove_all_forward_hooks(model):
 
 def train(config, project, wandb_logger=None):
 
-    adata = process_data(pc_dim=config.pc_dim, data=config.dataset)
+    random.seed(config.seed)
+    np.random.seed(config.seed)
+    torch.manual_seed(config.seed)
+
+    adata = process_data(pc_dim=config.pc_dim, data=config.dataset, use_paga=config.use_paga)
+    config.num_classes = adata.obs['cell_type'].nunique()
+
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     tree = adata.uns['tree']
 

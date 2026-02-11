@@ -111,6 +111,7 @@ class EmbedNetTrainBase(ModelBase):
 
         self.log("train_loss_embed", loss_embed)
         self.log("train_loss_geo", loss_geo)
+        self.log("train_loss_geo_embed", loss_embed + loss_geo)
         return loss_embed + loss_geo
 
     def _sample_geodesic(self, batch, timepoints, ot_sample=True, weighted=False):

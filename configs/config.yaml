@@ -5,6 +5,8 @@ defaults:
 pc_dim: -1
 num_classes: -1
 
+seed: 42
+
 # Trainer settings
 classifier_max_epochs: 1000
 metric_max_epochs: 3000
@@ -17,6 +19,8 @@ loader_batch_size: 6
 flow_batch_size: 512
 score_batch_size: 2048
 ema_decay: 1-1e-3
+
+use_paga: False
 
 # Model Hparams
 lr: 1e-3
