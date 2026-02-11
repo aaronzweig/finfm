@@ -76,9 +76,9 @@ parameters:
   mfm.kappa:
     values: [1.0, 1.5, 2.0]
   mfm.K:
-    values: [150, 300]
+    values: [150]
   mfm.epsilon:
-    values: [1e-2, 1e-1]
+    values: [5e-2, 1e-1]
   random_velocities:
     values: [true, false]
   time_per_batch:
