@@ -6,9 +6,9 @@ from utils.preprocess import *
 from utils.lineage import *
 
 def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
-    path = "/home/mingxuanzhang/finfm"
-    if data == "zebrafish":
-        suffix = "zebrafish_neural.h5ad"
+    path = "data"
+    if data == "zebrafish": #constrain to neural cells in control
+        suffix = "pairwise_hvg.h5ad"
         filename = os.path.join(path, suffix)
         adata = load_data(filename)
 
@@ -20,6 +20,7 @@ def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
 
         if use_paga:
+            print("using paga")
             adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True)
         else:
             adj = ZEBRAFISH_NEURAL_ADJACENCY

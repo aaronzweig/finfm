@@ -9,6 +9,9 @@ from models.cfm import *
 import torch.nn.functional as F
 from torch.func import jvp
 
+def sample(x, size):
+    indices = torch.randint(0, x.shape[0], size=(size,))
+    return x[indices]
 
 class EmbedNetTrainBase(ModelBase):
     def __init__(
@@ -89,12 +92,16 @@ class EmbedNetTrainBase(ModelBase):
                                                                                 ot_sample=self.config.ot_in_embed,
                                                                                 time_per_batch=self.config.time_per_batch)
             xt_free, dxt_free = xt.detach(), dxt.detach()
-            # v = torch.randn_like(dxt_free)
-            # v /= torch.norm(v, dim=-1, keepdim=True)
+
+            #Train embed with random vectors towards real data
+            if self.config.random_velocities:
+                x0_x1 = torch.cat([x0[i], x1[i]], dim=0)
+                v = sample(x0_x1, xt_free.shape[0]) - xt_free 
+                v /= torch.norm(v, dim=-1, keepdim=True)
+                loss_embed += self.embed_loss(xt_free, v)
 
             #TODO: should we normalize dxt_free too?  Morally yes because we're comparing two homogeneous norms
             loss_embed += self.embed_loss(xt_free, dxt_free)
-            # loss_embed += self.embed_loss(xt_free, v)
             loss_geo += self.geo_loss(xt, dxt)
 
         return loss_embed / x0.shape[0], loss_geo / x0.shape[0]
@@ -104,6 +111,7 @@ class EmbedNetTrainBase(ModelBase):
 
         self.log("train_loss_embed", loss_embed)
         self.log("train_loss_geo", loss_geo)
+        self.log("train_loss_geo_embed", loss_embed + loss_geo)
         return loss_embed + loss_geo
 
     def _sample_geodesic(self, batch, timepoints, ot_sample=True, weighted=False):

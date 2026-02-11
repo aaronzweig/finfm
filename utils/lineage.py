@@ -3,30 +3,6 @@ import numpy as np
 import scanpy as sc
 
 
-def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True):
-    sc.pp.neighbors(adata, use_rep="X_pca")
-    sc.tl.paga(adata, groups=cell_type_key)
-    categories = adata.obs[cell_type_key].cat.categories.tolist()
-    if use_tree:
-        conn = adata.uns['paga']['connectivities_tree'].toarray()
-    else:
-        conn = adata.uns['paga']['connectivities'].toarray()
-        conn[conn < threshold] = 0
-
-    # Build adjacency dictionary
-    adj = {}
-    n = len(categories)
-    for i in range(n):
-        neighbors = []
-        for j in range(n):
-            if conn[i, j] > 0:
-                neighbors.append(categories[j])
-        if neighbors:
-            adj[categories[i]] = neighbors
-
-    return adj
-
-
 ZEBRAFISH_NEURAL_ADJACENCY = {
     'neural progenitor (telencephalon/diencephalon)': [
         'differentiating neuron 1',
@@ -77,7 +53,34 @@ CITE_ADJACENCY = {
     'HSC': ['NeuP', 'EryP', 'MasP', 'MkP', 'MoP', 'BP']
 }
 
+import itertools
+import numpy as np
+import scanpy as sc
 
+def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True):
+    sc.pp.neighbors(adata, use_rep="X_pca")
+    sc.tl.paga(adata, groups=cell_type_key)
+    categories = adata.obs[cell_type_key].cat.categories.tolist()
+    if use_tree:
+        conn = adata.uns['paga']['connectivities_tree'].toarray()
+    else:
+        conn = adata.uns['paga']['connectivities'].toarray()
+        conn[conn < threshold] = 0
+
+    # Build adjacency dictionary
+    adj = {}
+    n = len(categories)
+    for i in range(n):
+        neighbors = []
+        for j in range(n):
+            if conn[i, j] > 0:
+                neighbors.append(categories[j])
+        if neighbors:
+            adj[categories[i]] = neighbors
+
+    return adj
+
+from sklearn.preprocessing import LabelEncoder
 #TODO: we currently prune to only have cell_types in the tree
 def incorporate_tree(adata, adj, cell_type_key):
     # cell_types = adata.obs[cell_type_key].unique().tolist()

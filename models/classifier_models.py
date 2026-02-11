@@ -25,6 +25,7 @@ class ClassifierNetTrainBase(ModelBase):
         self.classifier_net = classifier_net
         self.dummy_prior = self.config.dummy_prior
         self.dummy_kl_weight = self.config.dummy_kl_weight
+        self.epsilon = self.config.classifier.epsilon
 
     #Expects input from raw data
     def classify(self, x): 
@@ -49,7 +50,8 @@ class ClassifierNetTrainBase(ModelBase):
 
     def _compute_loss(self, batch):
         x, y = self._prepare_batch(batch)
-        logits = self.classifier_net(x)
+        noise = (self.epsilon * torch.randn_like(x)).float()
+        logits = self.classifier_net(x + noise)
         ce_loss = F.cross_entropy(logits, y)
 
         kl_loss = torch.tensor(0.0, device=logits.device)

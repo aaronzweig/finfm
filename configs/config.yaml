@@ -5,6 +5,8 @@ defaults:
 pc_dim: -1
 num_classes: -1
 
+seed: 42
+
 # Trainer settings
 classifier_max_epochs: 1000
 metric_max_epochs: 3000
@@ -18,6 +20,8 @@ flow_batch_size: 512
 score_batch_size: 2048
 ema_decay: 1-1e-3
 
+use_paga: False
+
 # Model Hparams
 lr: 1e-3
 dropout: 0.0
@@ -29,6 +33,7 @@ num_freq: 32
 rescale: 0.5
 skip: False
 normalize: True
+balance_classes: False
 
 # Debug settings
 force_cpu: False
@@ -42,6 +47,8 @@ dummy_kl_weight: 0.05
 classifier:
   hidden_dim: 20
   num_layers: 1
+  spectral_norm: False
+  epsilon: 0.0
 
 # Metric / Flow settings
 metric: "cfm"
@@ -50,6 +57,7 @@ ot_in_embed: True
 fast_ot: False
 no_learning: False
 time_per_batch: 4
+random_velocities: False
 
 method: "exact"
 reg: -1

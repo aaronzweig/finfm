@@ -25,6 +25,9 @@ def run_trial(dataset, overrides=None):
     for key, value in dict(wandb.config).items():
         OmegaConf.update(cfg, key, value)
 
+    # Log the full merged config so it's visible on the wandb dashboard
+    wandb.config.update(OmegaConf.to_container(cfg, resolve=True), allow_val_change=True)
+
     wandb_logger = WandbLogger(experiment=run)
     _, _, _, _, w1_scores = train(cfg, cfg.project, wandb_logger=wandb_logger)
 

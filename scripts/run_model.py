@@ -6,6 +6,8 @@ from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from torch.utils.data import WeightedRandomSampler
+import random
 
 from torch.utils.data import Dataset, Sampler, DataLoader
 import pytorch_lightning as pl
@@ -30,7 +32,8 @@ def build_classifier(config):
     classifier_net = SimpleDenseNet(input_dim=config.pc_dim,
                                      output_dim=config.num_classes+1,
                                      hidden_dims=[config.classifier.hidden_dim]*config.classifier.num_layers,
-                                     layer_norm=True)
+                                     layer_norm=True,
+                                     use_spectral_norm=config.classifier.spectral_norm)
 
     classifier_model = ClassifierNetTrainBase(classifier_net=classifier_net, config=config)
     return classifier_model
@@ -136,7 +139,7 @@ def build_trainer(config, wandb_logger, phase):
         max_epochs = config.metric_max_epochs
     elif phase == "embed":
         max_epochs = config.embed_max_epochs
-        callbacks.append(DatasetUpdateCallback())
+        callbacks.append(BestModelCallback("train_loss_geo_embed"))
     elif phase == "flow":
         max_epochs = config.flow_max_epochs
     else:
@@ -157,10 +160,24 @@ def build_trainer(config, wandb_logger, phase):
 def build_singleton_dataloader(config, adata):
     X, y = extract_singleton_dataset(adata)
     train_dataset = TensorDataset(X, y)
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size = config.score_batch_size,
-                                  drop_last=True, 
-                                  shuffle=True)
+    if config.balance_classes:
+
+        class_counts = torch.bincount(y) + 1
+        class_weights = 1.0 / class_counts.float()
+        sample_weights = class_weights[y]
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        train_dataloader = DataLoader(train_dataset, 
+                                      batch_size=config.score_batch_size,
+                                      sampler=sampler)
+    else:
+        train_dataloader = DataLoader(train_dataset,
+                                    batch_size = config.score_batch_size,
+                                    drop_last=True, 
+                                    shuffle=True)
 
     return train_dataloader
 
@@ -178,14 +195,9 @@ def build_paired_dataloader(config, adata):
     return train_dataloader
 
 def run_full_model(config, project, singleton_dataloader, paired_dataloader, timepoints, tree, wandb_logger=None):
-    """Train all four phases (classifier, metric, embed, flow).
 
-    Args:
-        wandb_logger: Optional external WandbLogger (e.g. from sweep.py).
-            If provided, this single logger is reused for every phase — no
-            per-phase wandb.init() calls are made.  When None, behaviour
-            falls back to config.use_wandb (notebook path with per-phase runs).
-    """
+    print(config)
+
     classifier_model = build_classifier(config)
     metric_model = build_metric(config, tree, classifier_model)
     embed_model = build_embed(config, timepoints, metric_model)
@@ -207,7 +219,9 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
         assert config.metric == "cfm" and not config.finsler.use, "you need to learn a metric"
         return classifier_model, metric_model, embed_model, flow_model
 
-    phase_list =  ['classifier', 'metric', 'embed', 'flow']
+    # phase_list =  ['classifier', 'metric', 'embed', 'flow']
+    phase_list =  ['classifier', 'metric', 'embed']
+
 
     for i, phase in enumerate(phase_list):
 
@@ -260,7 +274,13 @@ def remove_all_forward_hooks(model):
 
 def train(config, project, wandb_logger=None):
 
-    adata = process_data(pc_dim=config.pc_dim, data=config.dataset, use_paga=True)
+    random.seed(config.seed)
+    np.random.seed(config.seed)
+    torch.manual_seed(config.seed)
+
+    adata = process_data(pc_dim=config.pc_dim, data=config.dataset, use_paga=config.use_paga)
+    config.num_classes = adata.obs['cell_type'].nunique()
+
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
     tree = adata.uns['tree']
 

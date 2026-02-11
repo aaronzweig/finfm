@@ -166,12 +166,12 @@ class FinslerMixin:
         self.classifier_model = classifier_model
         self.lamb = lamb
         self.tree = self._pad_tree(tree)
-
-        print("DEBUG: no fisher rao")
-
     
     def classifier_fn(self, x):
         return torch.softmax(self.classifier_model(x) / self.temp, dim=-1)
+    
+    def logit_fn(self, x):
+        return self.classifier_model(x)
 
     def _pad_tree(self, tree):
         target = tree.shape[-1] + 1
@@ -186,6 +186,10 @@ class FinslerMixin:
         diag = 1 / (p + self.eps)
         return diag
     
+    def riemann_norm(self, x, v):
+        return super().forward(x, v)
+    
+    # # Forward mode basic
     # def forward(self, x, v):
     #     riemann_term = super().forward(x, v)
     #     f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
@@ -196,31 +200,84 @@ class FinslerMixin:
     #     D = torch.ones_like(f_x)
 
     #     finsler_term = torch.sum(Jf_x_v * D * u, dim=-1)
+    #     finsler_term *= riemann_term / torch.norm(v, dim=-1)
     #     return riemann_term + self.lamb * F.relu(finsler_term)
 
-    def riemann_norm(self, x, v):
-        return super().forward(x, v)
+    # # Backward mode basic
+    # def forward(self, x, v):
+    #     riemann_term = self.riemann_norm(x, v)
+    #     f_x = self.classifier_fn(x)
 
-    def forward(self, x, v):
-        riemann_term = self.riemann_norm(x, v)
-        f_x = self.classifier_fn(x)
+    #     u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
 
-        u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
+    #     _, vjp_fn = vjp(self.classifier_fn, x) 
+    #     h = vjp_fn(u)[0]
 
-        _, vjp_fn = vjp(self.classifier_fn, x) 
-        h = vjp_fn(u)[0]
+    #     #Crummy approximation to the dual norm
+    #     # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1) ** 2
+    #     # h = h * h_scale.unsqueeze(-1)
 
-        #Crummy approximation to the dual norm
-        # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1) ** 2
-        # h = h * h_scale.unsqueeze(-1)
-
-        # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1)
-        # ent = torch.sum(-f_x * torch.log(f_x), dim=-1)
+    #     # h_scale = self.riemann_norm(x, h) / torch.norm(h, dim=-1)
+    #     # ent = torch.sum(-f_x * torch.log(f_x), dim=-1)
         
-        # D = self.fisher_rao(x)
+    #     # D = self.fisher_rao(x)
 
-        finsler_term = torch.sum(v * h, dim=-1)
-        return riemann_term + self.lamb * F.relu(finsler_term)
+    #     finsler_term = torch.sum(v * h, dim=-1)
+    #     return riemann_term + self.lamb * F.relu(finsler_term)
+
+    # Classwise
+    def forward(self, x, v):
+        riemann_term = super().forward(x, v)
+        f_x, Jf_x_v = jvp(self.classifier_fn, (x,), (v,))
+        
+        u = 1 - (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
+
+        # D = 1 / (f_x + self.eps)
+        D = 1
+
+        finsler_term = torch.sum(f_x * F.relu(D * Jf_x_v @ u.T), dim=-1)
+
+        scale = riemann_term / torch.norm(v, dim = -1)
+
+        return riemann_term + self.lamb * scale * F.relu(finsler_term)
+
+    # Classwise logits
+    # def forward(self, x, v):
+    #     riemann_term = super().forward(x, v)
+    #     _, Jl_x_v = jvp(self.logit_fn, (x,), (v,))
+    #     f_x = self.classifier_fn(x)
+        
+    #     u = 1 - (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
+
+    #     finsler_term = torch.sum(f_x * F.relu(Jl_x_v @ u.T), dim=-1)
+
+    #     return riemann_term + self.lamb * F.relu(finsler_term)
+
+    # Logits
+    # def forward(self, x, v):
+    #     riemann_term = self.riemann_norm(x, v)
+    #     _, Jl_x_v = jvp(self.logit_fn, (x,), (v,))
+    #     f_x = self.classifier_fn(x)
+
+    #     u = 1 - f_x @ (self.tree.to(self.get_device()) + torch.eye(f_x.shape[-1], device=x.device))
+
+    #     D = f_x
+        
+    #     finsler_term = torch.sum(Jl_x_v * D * u, dim=-1)
+    #     return riemann_term + self.lamb * F.relu(finsler_term)
+
+    # Riemann Conformal
+    # def forward(self, x, v):
+    #     riemann_term = self.riemann_norm(x, v)
+    #     f_x = self.classifier_fn(x)
+
+    #     A = self.tree.to(self.get_device())
+    #     M = A + A.T + torch.eye(f_x.shape[-1], device=x.device)
+
+    #     conformal = torch.sum(f_x * (f_x @ (1 - M)), dim=-1)
+        
+    #     return riemann_term + self.lamb * torch.norm(v, dim=-1) * torch.sqrt(conformal)
+
 
 class FinslerCFM(FinslerMixin, MetricNetCFM):
     pass
