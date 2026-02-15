@@ -4,6 +4,7 @@ import torch
 from datasets.dataset import *
 from utils.preprocess import *
 from utils.lineage import *
+import networkx as nx
 
 def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
     path = "data"
@@ -57,7 +58,7 @@ def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
             print("Loading cached preprocessed mouse data...")
             adata = sc.read(cache_file)
         else:
-            print("Loading raw mouse atlas data (this may take a few minutes)...")
+            print("Loading raw mouse atlas data...")
             counts = sio.mmread(os.path.join("atlas", "raw_counts.mtx")).T.tocsr()
             meta = pd.read_csv(os.path.join("atlas", "meta.csv"))
             genes = pd.read_csv(os.path.join("atlas", "genes.tsv"), sep='\t', header=None,
@@ -98,10 +99,12 @@ def process_data(pc_dim, data="zebrafish", use_paga=False, paga_threshold=0.0):
         sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
         adata.uns['std'] = np.ones((1, pc_dim))
 
-        # Tree: always use PAGA for mouse (no manual adjacency defined)
+        # Tree: always use PAGA for mouse 
         if use_paga:
             print("using paga")
-        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True)
+        
+        # ROOT IS HARDCODED NOW
+        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True, realign=True)    
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     return adata

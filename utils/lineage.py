@@ -1,6 +1,7 @@
 import itertools
 import numpy as np
 import scanpy as sc
+import networkx as nx
 
 
 ZEBRAFISH_NEURAL_ADJACENCY = {
@@ -57,7 +58,7 @@ import itertools
 import numpy as np
 import scanpy as sc
 
-def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True):
+def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True, realign=True):
     sc.pp.neighbors(adata, use_rep="X_pca")
     sc.tl.paga(adata, groups=cell_type_key)
     categories = adata.obs[cell_type_key].cat.categories.tolist()
@@ -66,14 +67,27 @@ def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True):
     else:
         conn = adata.uns['paga']['connectivities'].toarray()
         conn[conn < threshold] = 0
-
+        
+    
+    # realgin tree direction based on set root
+    if use_tree and realign:
+        A_und = np.maximum(conn, conn.T)
+        np.fill_diagonal(A_und, 0)
+        groups_key = adata.uns['paga'].get("groups", "cell_type")
+        cats = adata.obs[groups_key].cat.categories
+        root = int(cats.get_loc("Epiblast"))
+        G_und = nx.from_numpy_array(A_und)
+        
+        # do a bfs tree from root cell type
+        T = nx.to_numpy_array(nx.bfs_tree(G_und, source=root))
+              
     # Build adjacency dictionary
     adj = {}
     n = len(categories)
     for i in range(n):
         neighbors = []
         for j in range(n):
-            if conn[i, j] > 0:
+            if T[i, j] > 0:
                 neighbors.append(categories[j])
         if neighbors:
             adj[categories[i]] = neighbors
