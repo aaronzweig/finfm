@@ -12,78 +12,32 @@ metric:
   name: w1_avg
   goal: minimize
 
-# parameters:
-#   metric:
-#     values: ["mfm"]
-#   finsler.use:
-#     values: [true, false]
-
-#   use_paga:
-#     values: [False]
-#   finsler.lamb:
-#     values: [0.5]
-#   classifier.hidden_dim:
-#     values: [256]
-#   classifier.num_layers:
-#     values: [2]
-#   classifier.epsilon:
-#     values: [0.05]
-#   use_euclidean_ot:
-#     values: [False]
-#   seed:
-#     values: [1,2,3,4,5]
-
-
-
-
-method: random
-
-metric:
-  name: w1_avg
-  goal: minimize
-
 parameters:
+
+  # classifier_max_epochs:
+  #   values: [2]
+  # metric_max_epochs:
+  #   values: [500]
+  # embed_max_epochs:
+  #   values: [2]
+
   metric:
     values: ["mfm"]
   finsler.use:
     values: [true, false]
-
-  # Constrained to our method
-  # metric:
-  #   values: ["mfm"]
-  # finsler.use:
-  #   values: [true]
-
-  use_paga:
-    values: [false]
-
-  # --- Finsler settings ---
   finsler.lamb:
-    values: [0.5, 1.0, 2.0]
-  dummy_kl_weight:
-    values: [0.05, 0.1, 0.2]
+    values: [0.5]
   classifier.hidden_dim:
-    values: [128, 256]
+    values: [256]
   classifier.num_layers:
-    values: [1, 2]
+    values: [2]
   classifier.epsilon:
-    values: [0.01, 0.05, 0.1]
-  balance_classes:
-    values: [true, false]
-
-
-  # --- MFM settings ---
-  mfm.kappa:
-    values: [1.0, 1.5, 2.0]
+    values: [0.05]
   mfm.K:
-    values: [150]
+    values: [200]
+  mfm.kappa:
+    values: [2.0]
   mfm.epsilon:
-    values: [5e-2, 1e-1]
-  random_velocities:
-    values: [true, false]
-  time_per_batch:
-    values: [4, 8]
-  use_euclidean_ot:
-    values: [true, false]
-  lr:
-    values: [1e-3]
+    values: [5e-2]
+  seed:
+    values: [1,2,3]
