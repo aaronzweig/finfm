@@ -150,7 +150,6 @@ def sample_points(size, d):
     return x, y, t, tree
 
 def sample_path(size, d):
-    assert d == 2
     sizes = [size//5] * 5
 
     x0 = 0.1 * np.random.normal(size=(sizes[0], d))

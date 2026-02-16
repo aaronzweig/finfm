@@ -74,3 +74,34 @@ finsler:
   use: False
   temp: 1.0
   lamb: 1.0
+
+gaga:
+  # Autoencoder settings
+  ae_latent_dim: 3
+  ae_hidden_dims: [256, 128, 64]
+  ae_dropout: 0.2
+  ae_use_spectral_norm: false
+  ae_dist_mse_decay: 0.0
+  ae_weights_dist: 77.4
+  ae_lr: 1e-3
+  ae_weight_decay: 1e-5
+  ae_max_epochs: 100
+  ae_batch_size: 32
+  distance_key: "dist"
+
+  # Discriminator settings
+  disc_hidden_dims: [256, 128, 64]
+  disc_lr: 1e-3
+  disc_weight_decay: 1e-4
+  disc_max_epochs: 100
+  disc_batch_size: 128
+  disc_dropout: 0.5
+  disc_use_spectral_norm: true
+  disc_factor: 5.0
+
+  # Negative sampling
+  noise_levels: [0.5, 1.0]
+  sampling_rejection: false
+  sampling_rejection_method: "sugar"
+  sampling_rejection_k: 20
+  sampling_rejection_threshold: 0.2

@@ -22,7 +22,7 @@ ZEBRAFISH_NEURAL_ADJACENCY = {
         'motor neuron'
     ],
     'posterior spinal cord progenitors': [
-        'differentiating neuron (hindbrain)',
+        'neuron (+ spinal cord)',
         'dorsal spinal cord neuron',
         'motor neuron'
     ],
@@ -48,6 +48,113 @@ ZEBRAFISH_NEURAL_ADJACENCY = {
         'neuron (telencephalon, glutamatergic)'
     ],
 }
+
+ARCH_NEURAL_ADJACENCY = {
+     'head mesenchyme (maybe ventral, hand2+)': [
+        'head mesenchyme/PA cartilage',
+        'pharyngeal arch (NC-derived)',
+    ],
+    'pharyngeal arch (NC-derived)': [
+        'jaw chondrocyte',
+    ],
+    'head mesenchyme/PA cartilage': [
+        'pharyngeal arch (early)',
+    ],
+    'pharyngeal arch (early)': [
+        'pharyngeal arch (contains muscle, early cartilage)',
+    ],
+    'pharyngeal arch (contains muscle, early cartilage)':[
+        'jaw chondrocyte',
+        'chondrocranium',
+    ]
+}
+
+#SMOOTHED
+# ZEBRAFISH_NEURAL_ADJACENCY = {
+#     'differentiating neuron (hindbrain)': [
+#         'hypophysis/locus coeruleus',
+#         'neuron (+ spinal cord)',
+#     ],
+#     'differentiating neuron 1': [
+#         'differentiating neuron 2',
+#         'neuron (dopaminergic)',
+#         'neuron (telencephalon, glutamatergic)',
+#         'neurons (differentiating, contains peripheral)',
+#         'neurons (gabaergic, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
+#     ],
+#     'differentiating neuron 2': [
+#         'differentiating neuron 1',
+#         'neuron (dopaminergic)',
+#         'neuron (telencephalon, glutamatergic)',
+#         'neurons (differentiating, contains peripheral)',
+#         'neurons (gabaergic, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
+#     ],
+#     'dorsal spinal cord neuron': [
+#     ],
+#     'hypophysis/locus coeruleus': [
+#     ],
+#     'motor neuron': [
+#     ],
+#     'neural progenitor (MHB)': [
+#         'differentiating neuron 1',
+#         'differentiating neuron 2',
+#         'neural progenitor (hindbrain R7/8)',
+#         'neural progenitor (telencephalon/diencephalon)',
+#     ],
+#     'neural progenitor (hindbrain R7/8)': [
+#         'differentiating neuron (hindbrain)',
+#         'differentiating neuron 1',
+#         'differentiating neuron 2',
+#         'motor neuron',
+#         'neural progenitor (MHB)',
+#         'neural progenitor (telencephalon/diencephalon)',
+#     ],
+#     'neural progenitor (hindbrain)': [
+#         'differentiating neuron (hindbrain)',
+#     ],
+#     'neural progenitor (telencephalon/diencephalon)': [
+#         'differentiating neuron 1',
+#         'differentiating neuron 2',
+#         'neural progenitor (MHB)',
+#         'neural progenitor (hindbrain R7/8)',
+#     ],
+#     'neuron (+ spinal cord)': [
+#     ],
+#     'neuron (dopaminergic)': [
+#         'neuron (telencephalon, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
+#     ],
+#     'neuron (telencephalon, glutamatergic)': [
+#         'neuron (dopaminergic)',
+#         'neurons (gabaergic, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
+#     ],
+#     'neurons (differentiating, contains peripheral)': [
+#         'differentiating neuron 1',
+#         'differentiating neuron 2',
+#         'neuron (telencephalon, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
+#     ],
+#     'neurons (gabaergic, glutamatergic)': [
+#         'neuron (dopaminergic)',
+#         'neuron (telencephalon, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
+#     ],
+#     'neurons (gabaergic, glutamatergic; contains Purkinje)': [
+#         'neuron (dopaminergic)',
+#         'neuron (telencephalon, glutamatergic)',
+#         'neurons (gabaergic, glutamatergic)',
+#     ],
+#     'posterior spinal cord progenitors': [
+#         'dorsal spinal cord neuron',
+#         'motor neuron',
+#         'neuron (+ spinal cord)',
+#     ],
+# }
 
 CITE_ADJACENCY = {
     'HSC': ['NeuP', 'EryP', 'MasP', 'MkP', 'MoP', 'BP']

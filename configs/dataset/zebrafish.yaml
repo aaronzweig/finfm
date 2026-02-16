@@ -2,5 +2,6 @@
 project: "zebrafish"
 dataset: "zebrafish"
 pc_dim: 100
+tissue: "Central Nervous System"
 t0_index: 1
 t1_index: 4
