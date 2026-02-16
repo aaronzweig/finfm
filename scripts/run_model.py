@@ -160,6 +160,7 @@ def build_trainer(config, wandb_logger, phase):
 def build_singleton_dataloader(config, adata):
     X, y = extract_singleton_dataset(adata)
     train_dataset = TensorDataset(X, y)
+    batch_size = min(len(train_dataset), config.score_batch_size)
     if config.balance_classes:
 
         class_counts = torch.bincount(y) + 1
@@ -171,11 +172,11 @@ def build_singleton_dataloader(config, adata):
             replacement=True
         )
         train_dataloader = DataLoader(train_dataset, 
-                                      batch_size=config.score_batch_size,
+                                      batch_size=batch_size,
                                       sampler=sampler)
     else:
         train_dataloader = DataLoader(train_dataset,
-                                    batch_size = config.score_batch_size,
+                                    batch_size=batch_size,
                                     drop_last=True, 
                                     shuffle=True)
 
@@ -278,7 +279,7 @@ def train(config, project, wandb_logger=None):
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
 
-    adata = process_data(pc_dim=config.pc_dim, data=config.dataset, use_paga=config.use_paga)
+    adata = process_data(pc_dim=config.pc_dim, t0_index=config.t0_index, t1_index=config.t1_index, data=config.dataset, use_paga=config.use_paga, tissue=config.tissue)
     config.num_classes = adata.obs['cell_type'].nunique()
 
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())

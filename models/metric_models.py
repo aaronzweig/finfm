@@ -125,17 +125,18 @@ class MetricNetGAGA(MetricNetTrainBase):
         self,
         encoder,
         discriminator,
+        disc_factor=5.0,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.encoder = encoder
         self.discriminator = discriminator
-        self.disc_factor = 5.0
-        print("TODO: GAGA needs to handle input normalization?")
+        self.disc_factor = disc_factor
 
     def _fn(self, x):
-        z = self.encoder(x)
+        # x is already ModelBase-normalized; encoder shares the same normalization
+        z = self.encoder(x, normalize=False)
         penalty = torch.exp(self.disc_factor * (1 - self.discriminator.positive_prob(z)))
         return torch.cat([z, penalty.unsqueeze(1)], dim=1)
 
@@ -145,7 +146,7 @@ class MetricNetGAGA(MetricNetTrainBase):
 
     def _compute_loss(self, batch):
         return torch.tensor(0.0, device=self.device, requires_grad=True)
-    
+
     def configure_optimizers(self):
         return None
 
