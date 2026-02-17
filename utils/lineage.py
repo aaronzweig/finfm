@@ -164,29 +164,58 @@ CITE_ADJACENCY = {
 import itertools
 import numpy as np
 import scanpy as sc
+from scipy.sparse import csr_matrix
+from collections import deque
 
-def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True, realign=True):
+def enforce_dag_from_root(adata, root_cell_type, groups='cell_type', threshold=0.0):
+
+    connectivity = adata.uns['paga']['connectivities'].toarray()
+    n_nodes = connectivity.shape[0]
+    
+    categories = adata.obs[groups].cat.categories
+    root_idx = np.where(categories == root_cell_type)[0][0]
+    
+    directed_connectivity = np.zeros_like(connectivity)
+    
+    levels = np.full(n_nodes, -1)
+    levels[root_idx] = 0
+    queue = deque([root_idx])
+    
+    while queue:
+        current = queue.popleft()
+        current_level = levels[current]
+        
+        neighbors = np.where(connectivity[current] > threshold)[0]
+        
+        for neighbor in neighbors:
+            if levels[neighbor] == -1:  # Unvisited
+                levels[neighbor] = current_level + 1
+                queue.append(neighbor)
+    
+    for i in range(n_nodes):
+        for j in range(n_nodes):
+            if connectivity[i, j] > 0:  # There's an edge
+                if levels[i] < levels[j]:  # i -> j (forward)
+                    directed_connectivity[i, j] = connectivity[i, j]
+                elif levels[i] > levels[j]:  # j -> i (reverse)
+                    directed_connectivity[j, i] = connectivity[i, j]
+    
+    adata.uns['paga']['connectivities_dag'] = csr_matrix(directed_connectivity)
+    adata.uns['paga']['levels'] = levels
+    
+    return directed_connectivity, levels
+
+def run_paga_tree(adata, cell_type_key, threshold=0.2, root_node=""):
     sc.pp.neighbors(adata, use_rep="X_pca")
     sc.tl.paga(adata, groups=cell_type_key)
     categories = adata.obs[cell_type_key].cat.categories.tolist()
-    if use_tree:
-        conn = adata.uns['paga']['connectivities_tree'].toarray()
-    else:
-        conn = adata.uns['paga']['connectivities'].toarray()
-        conn[conn < threshold] = 0
-        
-    
-    # realgin tree direction based on set root
-    if use_tree and realign:
-        A_und = np.maximum(conn, conn.T)
-        np.fill_diagonal(A_und, 0)
-        groups_key = adata.uns['paga'].get("groups", "cell_type")
-        cats = adata.obs[groups_key].cat.categories
-        root = int(cats.get_loc("Epiblast"))
-        G_und = nx.from_numpy_array(A_und)
-        
-        # do a bfs tree from root cell type
-        T = nx.to_numpy_array(nx.bfs_tree(G_und, source=root))
+
+    directed_conn, _ = enforce_dag_from_root(
+    adata, 
+    root_cell_type=root_node,
+    groups='cell_type',
+    threshold=threshold
+    )
               
     # Build adjacency dictionary
     adj = {}
@@ -194,7 +223,7 @@ def run_paga_tree(adata, cell_type_key, threshold=0.0, use_tree=True, realign=Tr
     for i in range(n):
         neighbors = []
         for j in range(n):
-            if T[i, j] > 0:
+            if directed_conn[i, j] > threshold:
                 neighbors.append(categories[j])
         if neighbors:
             adj[categories[i]] = neighbors

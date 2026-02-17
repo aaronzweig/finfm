@@ -149,14 +149,14 @@ def sample_points(size, d):
     
     return x, y, t, tree
 
-def sample_path(size, d):
+def sample_path(size, d, sigma=0.1):
     sizes = [size//5] * 5
 
-    x0 = 0.1 * np.random.normal(size=(sizes[0], d))
-    x1 = 0.1 * np.random.normal(size=(sizes[1], d))
-    x2 = 0.1 * np.random.normal(size=(sizes[2], d))
-    x3 = 0.1 * np.random.normal(size=(sizes[3], d))
-    x4 = 0.1 * np.random.normal(size=(sizes[4], d))
+    x0 = sigma * np.random.normal(size=(sizes[0], d))
+    x1 = sigma * np.random.normal(size=(sizes[1], d))
+    x2 = sigma * np.random.normal(size=(sizes[2], d))
+    x3 = sigma * np.random.normal(size=(sizes[3], d))
+    x4 = sigma * np.random.normal(size=(sizes[4], d))
 
     x0[:,0] -= 1.0
     x1[:,1] += 1.0

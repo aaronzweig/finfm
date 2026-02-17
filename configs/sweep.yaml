@@ -14,30 +14,17 @@ metric:
 
 parameters:
 
-  # classifier_max_epochs:
-  #   values: [2]
-  # metric_max_epochs:
-  #   values: [500]
-  # embed_max_epochs:
-  #   values: [2]
-
   metric:
-    values: ["mfm"]
+    values: ["cfm", "mfm"]
   finsler.use:
     values: [true, false]
   finsler.lamb:
-    values: [0.5]
+    values: [0.2, 0.5]
   classifier.hidden_dim:
-    values: [256]
+    values: [128, 256]
   classifier.num_layers:
     values: [2]
   classifier.epsilon:
-    values: [0.05]
-  mfm.K:
-    values: [200]
-  mfm.kappa:
-    values: [2.0]
-  mfm.epsilon:
-    values: [5e-2]
+    values: [0.02, 0.05]
   seed:
     values: [1,2,3]

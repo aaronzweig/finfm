@@ -2,34 +2,74 @@ import os
 import numpy as np
 import scanpy as sc
 import torch
+import pandas as pd
 from datasets.dataset import *
 from utils.preprocess import *
 from utils.lineage import *
 import networkx as nx
+import scipy.io as sio
 
-def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, paga_threshold=0.0, tissue="Central Nervous System"):
+
+def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, paga_threshold=0.2, tissue="Central Nervous System"):
     path = "data"
     if data == "zebrafish": 
-        suffix = "pairwise_hvg.h5ad"
+        suffix = "zebra_preprocessed.h5ad"
         filename = os.path.join(path, suffix)
-        adata = load_data(filename)
+        if os.path.exists(filename):
+            adata = load_data(filename)
+        else:
+            print("Loading raw zebrafish atlas data...")
 
-        subset = (adata.obs['gene_target'] == 'ctrl-inj') & (adata.obs['tissue'] == tissue)
+
+            mtx_suffix = "zscape_perturb_full_raw_counts.mtx"
+            cell_suffix = "zscape_perturb_full_cell_metadata.csv"
+            gene_suffix = "zscape_perturb_full_gene_metadata.csv"
+
+            mtx_filename = os.path.join(path, mtx_suffix)
+            cell_filename = os.path.join(path, cell_suffix)
+            gene_filename = os.path.join(path, gene_suffix)
+
+            adata = sc.read_mtx(mtx_filename)
+            cell_metadata = pd.read_csv(cell_filename)
+            gene_metadata = pd.read_csv(gene_filename)
+
+            adata = adata.transpose()
+            adata.obs = cell_metadata
+            adata.var = gene_metadata
+
+            adata.var["gene_short_name"] = adata.var["gene_short_name"].astype(str)
+            adata.var_names = adata.var["gene_short_name"].values
+            adata.var_names_make_unique()
+
+            adata = adata[adata.obs['gene_target'] == 'ctrl-inj']
+
+            sc.pp.filter_cells(adata, min_genes=100)
+            sc.pp.filter_genes(adata, min_cells=3)
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+            sc.pp.highly_variable_genes(adata, n_top_genes=2000)
+
+            adata = adata[:, adata.var['highly_variable']].copy()
+
+            adata.write(filename)
+            print(f"Saved preprocessed data to {filename}")
+
+        subset = adata.obs['tissue'] == tissue
         adata = adata[subset]
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
-        # sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
+        sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
 
         # Fit PCA on t0/t1 subset, apply transform to all data
-        timepoints = sorted(adata.obs['timepoint'].unique().tolist())
-        t0, t1 = timepoints[t0_index], timepoints[t1_index]
-        subset = adata[adata.obs['timepoint'].isin([t0, t1])].copy()
-        sc.tl.pca(subset, n_comps=pc_dim, mask_var=None)
+        # timepoints = sorted(adata.obs['timepoint'].unique().tolist())
+        # t0, t1 = timepoints[t0_index], timepoints[t1_index]
+        # subset = adata[adata.obs['timepoint'].isin([t0, t1])].copy()
+        # sc.tl.pca(subset, n_comps=pc_dim, mask_var=None)
 
-        mean = np.mean(subset.X, axis=0)
-        PCs = subset.varm['PCs']
-        adata.obsm['X_pca'] = (adata.X - mean) @ PCs
-        adata.varm['PCs'] = PCs
-        adata.uns['pca'] = subset.uns['pca']
+        # mean = np.mean(subset.X, axis=0)
+        # PCs = subset.varm['PCs']
+        # adata.obsm['X_pca'] = (adata.X - mean) @ PCs
+        # adata.varm['PCs'] = PCs
+        # adata.uns['pca'] = subset.uns['pca']
 
         if tissue == "Central Nervous System" and not use_paga:
             adj = ZEBRAFISH_NEURAL_ADJACENCY
@@ -37,7 +77,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
             adj = ARCH_NEURAL_ADJACENCY
         else:
             print("using paga")
-            adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True)
+            adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold)
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     # elif data == "cite":
@@ -69,21 +109,19 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
     #     adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
     #     adata.obs['timepoint'] = adata.obs['day']
 
-        adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
+    #     adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
 
     elif data == "mouse":
-        import scipy.io as sio
-        import pandas as pd
 
-        cache_file = os.path.join("atlas", "mouse_preprocessed.h5ad")
+        cache_file = os.path.join(path, "atlas", "mouse_preprocessed.h5ad")
         if os.path.exists(cache_file):
             print("Loading cached preprocessed mouse data...")
             adata = sc.read(cache_file)
         else:
             print("Loading raw mouse atlas data...")
-            counts = sio.mmread(os.path.join("atlas", "raw_counts.mtx")).T.tocsr()
-            meta = pd.read_csv(os.path.join("atlas", "meta.csv"))
-            genes = pd.read_csv(os.path.join("atlas", "genes.tsv"), sep='\t', header=None,
+            counts = sio.mmread(os.path.join(path, "atlas", "raw_counts.mtx")).T.tocsr()
+            meta = pd.read_csv(os.path.join(path, "atlas", "meta.csv"))
+            genes = pd.read_csv(os.path.join(path, "atlas", "genes.tsv"), sep='\t', header=None,
                                 names=['ensembl_id', 'gene_symbol'])
 
             adata = sc.AnnData(X=counts)
@@ -126,7 +164,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
             print("using paga")
         
         # ROOT IS HARDCODED NOW
-        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True, realign=True)    
+        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="Epiblast")    
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     return adata
