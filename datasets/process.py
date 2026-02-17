@@ -10,8 +10,12 @@ import networkx as nx
 import scipy.io as sio
 
 
-def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, paga_threshold=0.2, tissue="Central Nervous System"):
-    path = "data"
+
+
+def process_data(pc_dim, t0_index, t1_index, data="zebrafish", 
+                 use_paga=False, paga_threshold=0.2, 
+                 tissue="Central Nervous System", subset_mouse=True):
+    path = "/home/mingxuanzhang/finfm"
     if data == "zebrafish": 
         suffix = "zebra_preprocessed.h5ad"
         filename = os.path.join(path, suffix)
@@ -19,8 +23,6 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
             adata = load_data(filename)
         else:
             print("Loading raw zebrafish atlas data...")
-
-
             mtx_suffix = "zscape_perturb_full_raw_counts.mtx"
             cell_suffix = "zscape_perturb_full_cell_metadata.csv"
             gene_suffix = "zscape_perturb_full_gene_metadata.csv"
@@ -112,13 +114,28 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
     #     adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
 
     elif data == "mouse":
-
+        BLOOD = [ "Blood progenitors 1",
+                   "Blood progenitors 2",
+                    "Haematoendothelial progenitors",
+                    "Erythroid1",
+                    "Erythroid2",
+                    "Erythroid3"]
+        
+        BRAIN = [
+                    "Rostral neurectoderm",
+                    "Forebrain/Midbrain/Hindbrain",
+                    "Spinal cord",
+                    "Caudal neurectoderm",
+                    "NMP",
+                    "Neural crest"
+                    ]
         cache_file = os.path.join(path, "atlas", "mouse_preprocessed.h5ad")
         if os.path.exists(cache_file):
             print("Loading cached preprocessed mouse data...")
             adata = sc.read(cache_file)
         else:
             print("Loading raw mouse atlas data...")
+
             counts = sio.mmread(os.path.join(path, "atlas", "raw_counts.mtx")).T.tocsr()
             meta = pd.read_csv(os.path.join(path, "atlas", "meta.csv"))
             genes = pd.read_csv(os.path.join(path, "atlas", "genes.tsv"), sep='\t', header=None,
@@ -154,6 +171,11 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
             'E7.5': 7.5, 'E7.75': 7.75, 'E8.0': 8.0, 'E8.25': 8.25, 'E8.5': 8.5
         }
         adata.obs['timepoint'] = adata.obs['stage'].map(stage_to_num).astype(float)
+        
+        # SUBSET TO TISSUE
+        if subset_mouse:
+            adata = adata[adata.obs['cell_type'].isin(BLOOD)].copy()
+            adata.obs['cell_type'] = adata.obs['cell_type'].astype('category').cat.remove_unused_categories()
 
         # PCA
         sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
@@ -164,7 +186,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
             print("using paga")
         
         # ROOT IS HARDCODED NOW
-        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="Epiblast")    
+        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="Haematoendothelial progenitors")    
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     return adata
