@@ -21,6 +21,7 @@ score_batch_size: 2048
 ema_decay: 1-1e-3
 
 use_paga: False
+paga_threshold: 0.0
 
 # Model Hparams
 lr: 1e-3
