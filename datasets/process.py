@@ -77,19 +77,32 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish", use_paga=False, p
             adj = ARCH_NEURAL_ADJACENCY
         else:
             print("using paga")
-            adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold)
+            cns_root_nodes=['neural progenitor (telencephalon/diencephalon)',
+                            'neural progenitor (MHB)',
+                            'neural progenitor (hindbrain)',
+                            'neural progenitor (hindbrain R7/8)',
+                            'posterior spinal cord progenitors'
+                            ]
+            arch_root_nodes = ['cranial muscle (progenitor)',
+                               'head mesenchyme (maybe ventral, hand2+)']
+            root_node = ""
+            if tissue == "Central Nervous System":
+                root_node = cns_root_nodes
+            elif tissue == "Pharyngeal Arch":
+                root_node = arch_root_nodes
+            adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node=root_node)
         adata = incorporate_tree(adata, adj, 'cell_type')
 
-    # elif data == "cite":
-    #     suffix = "cite.h5ad"
-    #     filename = os.path.join(path, suffix)
-    #     adata = sc.read(filename)
-    #     adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
-    #     adata.obs['timepoint'] = adata.obs['day']
+    elif data == "cite":
+        suffix = "cite.h5ad"
+        filename = os.path.join(path, suffix)
+        adata = sc.read(filename)
+        adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
+        adata.obs['timepoint'] = adata.obs['day']
 
-    #     adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
+        adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
 
-    #     #TODO: the wrong donor!???? But we downloaded it from https://data.mendeley.com/datasets/hhny5ff7yj/1
+        #TODO: the wrong donor!???? But we downloaded it from https://data.mendeley.com/datasets/hhny5ff7yj/1
 
     # elif data == "celegans":
     #     suffix = "celegans.h5ad"

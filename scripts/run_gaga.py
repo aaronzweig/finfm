@@ -17,7 +17,7 @@ from models.gaga import (
     sampling_rejection,
     encode_data,
 )
-from models.metric_models import MetricNetGAGA
+from models.metric_models import MetricNetGAGA, FinslerGAGA
 from models.embed_models import EmbedNetTrainBase
 from models.modules import SimpleEmbedNet, SinNet
 from datasets.process import process_data, extract_paired_dataset
@@ -25,7 +25,11 @@ from datasets.dataset import ShufflingDataset, ShufflingOTDataset
 from utils.frozen import freeze_params
 from utils.callback import BestModelCallback
 from eval.eval import predict
-from scripts.run_model import build_embed, build_paired_dataloader, build_trainer, remove_all_forward_hooks
+from scripts.run_model import (
+    build_embed, build_paired_dataloader, build_trainer,
+    build_classifier, build_singleton_dataloader,
+    remove_all_forward_hooks,
+)
 
 
 # --- Phase 1: Autoencoder ---
@@ -139,13 +143,31 @@ def build_and_train_discriminator(config, ae_model, X_pca, wandb_logger=None):
     trainer.fit(disc_model, train_dataloaders=disc_loader)
     return disc_model
 
+from scipy.spatial.distance import pdist, squareform
+from scipy import sparse as sp
+import phate
+
+def calculate_distances(X, seed=42, knn=5, t='auto', n_components=3):
+    # if X is sparse, convert to dense
+    if sp.issparse(X):
+        X = X.toarray()
+        
+    phate_op = phate.PHATE(random_state=seed, t=t, n_components=n_components, knn=knn, verbose=0)
+    phate_data = phate_op.fit_transform(X)
+    
+    dists = squareform(pdist(phate_op.diff_potential))
+
+    return dists
 
 # --- Main pipeline ---
 
-def run_gaga_model(config, project, adata_train, timepoints, wandb_logger=None):
-    """Run the full GAGA pipeline: autoencoder -> discriminator -> embed."""
+def run_gaga_model(config, project, adata_train, timepoints, tree, wandb_logger=None):
+    """Run the full GAGA pipeline: autoencoder -> discriminator -> (classifier) -> embed."""
 
     X_pca = adata_train.obsm['X_pca']
+
+    #TODO: PHATE
+    distances = calculate_distances(adata_train.obsm['X_pca'])
 
     # Phase 0: Compute normalization stats (ModelBase-style)
     X_tensor = torch.from_numpy(X_pca).float()
@@ -153,8 +175,6 @@ def run_gaga_model(config, project, adata_train, timepoints, wandb_logger=None):
     std = torch.max(torch.std(X_tensor, dim=0)) * np.sqrt(config.pc_dim)
 
     # Get distance matrix
-    dist_key = config.gaga.distance_key
-    distances = adata_train.obsp[dist_key]
     if issparse(distances):
         distances = distances.toarray()
     distances = np.asarray(distances, dtype=np.float32)
@@ -178,14 +198,58 @@ def run_gaga_model(config, project, adata_train, timepoints, wandb_logger=None):
     disc_model.eval()
     freeze_params(disc_model)
 
-    # Phase 3: Embed
+    # Phase 2.5 (optional): Classifier for Finsler mode
+    classifier_model = None
+    if config.finsler.use:
+        print("Phase 2.5: Training classifier for Finsler metric...")
+        classifier_model = build_classifier(config)
+        classifier_model.mean = mean
+        classifier_model.std = std
+
+        singleton_dataloader = build_singleton_dataloader(config, adata_train)
+
+        # Determine logger — same pattern as run_model.py
+        if wandb_logger is not None:
+            phase_logger = wandb_logger
+        elif config.use_wandb:
+            config_dict = OmegaConf.to_container(config, resolve=True, throw_on_missing=True)
+            phase_logger = WandbLogger(project=project, name="classifier", log_model=True)
+            wandb.init(config=config_dict, project=project, reinit=True)
+        else:
+            phase_logger = False
+
+        trainer = build_trainer(config, phase_logger, "classifier")
+        if phase_logger:
+            phase_logger.watch(classifier_model, log="gradients", log_freq=50)
+        trainer.fit(model=classifier_model, train_dataloaders=singleton_dataloader)
+        if phase_logger:
+            wandb.unwatch(classifier_model)
+        if wandb_logger is None and config.use_wandb:
+            wandb.finish()
+
+        classifier_model.eval()
+        freeze_params(classifier_model)
+
+    # Phase 3: Build metric model — branch on finsler flag
     print("Phase 3: Training embed model...")
-    metric_model = MetricNetGAGA(
-        config=config,
-        encoder=ae_model,
-        discriminator=disc_model,
-        disc_factor=config.gaga.disc_factor,
-    )
+    if config.finsler.use:
+        metric_model = FinslerGAGA(
+            config=config,
+            encoder=ae_model,
+            discriminator=disc_model,
+            disc_factor=config.gaga.disc_factor,
+            classifier_model=classifier_model,
+            tree=torch.from_numpy(tree).float(),
+            temp=config.finsler.temp,
+            lamb=config.finsler.lamb,
+        )
+    else:
+        metric_model = MetricNetGAGA(
+            config=config,
+            encoder=ae_model,
+            discriminator=disc_model,
+            disc_factor=config.gaga.disc_factor,
+        )
     embed_model = build_embed(config, timepoints, metric_model)
 
     # Set shared normalization on metric and embed models
@@ -220,7 +284,7 @@ def run_gaga_model(config, project, adata_train, timepoints, wandb_logger=None):
     embed_model.eval()
     freeze_params(embed_model)
 
-    return ae_model, disc_model, metric_model, embed_model
+    return classifier_model, ae_model, disc_model, metric_model, embed_model
 
 
 def train(config, project, wandb_logger=None):
@@ -241,23 +305,27 @@ def train(config, project, wandb_logger=None):
     config.num_classes = adata.obs['cell_type'].nunique()
 
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
+    tree = adata.uns['tree']
 
     t0, t1 = timepoints[config.t0_index], timepoints[config.t1_index]
 
     adata = adata[(adata.obs['timepoint'] >= t0) & (adata.obs['timepoint'] <= t1)]
     adata_train = adata[adata.obs['timepoint'].isin([t0, t1])]
 
-    ae_model, disc_model, metric_model, embed_model = run_gaga_model(
+    classifier_model, ae_model, disc_model, metric_model, embed_model = run_gaga_model(
         config=config,
         project=project,
         adata_train=adata_train,
         timepoints=timepoints,
+        tree=tree,
         wandb_logger=wandb_logger,
     )
 
     remove_all_forward_hooks(ae_model)
     remove_all_forward_hooks(metric_model)
     remove_all_forward_hooks(embed_model)
+    if classifier_model is not None:
+        remove_all_forward_hooks(classifier_model)
 
     # Evaluation: W1 distance to held-out timepoints
     w1_scores = []
@@ -267,4 +335,4 @@ def train(config, project, wandb_logger=None):
         w1_scores.append(w1)
     w1_scores = torch.tensor(w1_scores)
 
-    return ae_model, disc_model, metric_model, embed_model, w1_scores
+    return classifier_model, ae_model, disc_model, metric_model, embed_model, w1_scores

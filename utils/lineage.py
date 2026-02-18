@@ -70,93 +70,6 @@ ARCH_NEURAL_ADJACENCY = {
     ]
 }
 
-#SMOOTHED
-# ZEBRAFISH_NEURAL_ADJACENCY = {
-#     'differentiating neuron (hindbrain)': [
-#         'hypophysis/locus coeruleus',
-#         'neuron (+ spinal cord)',
-#     ],
-#     'differentiating neuron 1': [
-#         'differentiating neuron 2',
-#         'neuron (dopaminergic)',
-#         'neuron (telencephalon, glutamatergic)',
-#         'neurons (differentiating, contains peripheral)',
-#         'neurons (gabaergic, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
-#     ],
-#     'differentiating neuron 2': [
-#         'differentiating neuron 1',
-#         'neuron (dopaminergic)',
-#         'neuron (telencephalon, glutamatergic)',
-#         'neurons (differentiating, contains peripheral)',
-#         'neurons (gabaergic, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
-#     ],
-#     'dorsal spinal cord neuron': [
-#     ],
-#     'hypophysis/locus coeruleus': [
-#     ],
-#     'motor neuron': [
-#     ],
-#     'neural progenitor (MHB)': [
-#         'differentiating neuron 1',
-#         'differentiating neuron 2',
-#         'neural progenitor (hindbrain R7/8)',
-#         'neural progenitor (telencephalon/diencephalon)',
-#     ],
-#     'neural progenitor (hindbrain R7/8)': [
-#         'differentiating neuron (hindbrain)',
-#         'differentiating neuron 1',
-#         'differentiating neuron 2',
-#         'motor neuron',
-#         'neural progenitor (MHB)',
-#         'neural progenitor (telencephalon/diencephalon)',
-#     ],
-#     'neural progenitor (hindbrain)': [
-#         'differentiating neuron (hindbrain)',
-#     ],
-#     'neural progenitor (telencephalon/diencephalon)': [
-#         'differentiating neuron 1',
-#         'differentiating neuron 2',
-#         'neural progenitor (MHB)',
-#         'neural progenitor (hindbrain R7/8)',
-#     ],
-#     'neuron (+ spinal cord)': [
-#     ],
-#     'neuron (dopaminergic)': [
-#         'neuron (telencephalon, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
-#     ],
-#     'neuron (telencephalon, glutamatergic)': [
-#         'neuron (dopaminergic)',
-#         'neurons (gabaergic, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
-#     ],
-#     'neurons (differentiating, contains peripheral)': [
-#         'differentiating neuron 1',
-#         'differentiating neuron 2',
-#         'neuron (telencephalon, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
-#     ],
-#     'neurons (gabaergic, glutamatergic)': [
-#         'neuron (dopaminergic)',
-#         'neuron (telencephalon, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic; contains Purkinje)',
-#     ],
-#     'neurons (gabaergic, glutamatergic; contains Purkinje)': [
-#         'neuron (dopaminergic)',
-#         'neuron (telencephalon, glutamatergic)',
-#         'neurons (gabaergic, glutamatergic)',
-#     ],
-#     'posterior spinal cord progenitors': [
-#         'dorsal spinal cord neuron',
-#         'motor neuron',
-#         'neuron (+ spinal cord)',
-#     ],
-# }
-
 CITE_ADJACENCY = {
     'HSC': ['NeuP', 'EryP', 'MasP', 'MkP', 'MoP', 'BP']
 }
@@ -173,13 +86,19 @@ def enforce_dag_from_root(adata, root_cell_type, groups='cell_type', threshold=0
     n_nodes = connectivity.shape[0]
     
     categories = adata.obs[groups].cat.categories
-    root_idx = np.where(categories == root_cell_type)[0][0]
-    
+
+    # Support single root or list of roots
+    if isinstance(root_cell_type, str):
+        root_cell_type = [root_cell_type]
+    root_idxs = [np.where(categories == r)[0][0] for r in root_cell_type]
+
     directed_connectivity = np.zeros_like(connectivity)
-    
+
     levels = np.full(n_nodes, -1)
-    levels[root_idx] = 0
-    queue = deque([root_idx])
+    queue = deque()
+    for idx in root_idxs:
+        levels[idx] = 0
+        queue.append(idx)
     
     while queue:
         current = queue.popleft()

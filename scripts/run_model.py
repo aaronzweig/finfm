@@ -279,7 +279,13 @@ def train(config, project, wandb_logger=None):
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
 
-    adata = process_data(pc_dim=config.pc_dim, t0_index=config.t0_index, t1_index=config.t1_index, data=config.dataset, use_paga=config.use_paga, tissue=config.tissue)
+    adata = process_data(pc_dim=config.pc_dim, 
+                         t0_index=config.t0_index, 
+                         t1_index=config.t1_index, 
+                         data=config.dataset, 
+                         use_paga=config.use_paga, 
+                         paga_threshold=config.paga_threshold,
+                         tissue=config.tissue)
     config.num_classes = adata.obs['cell_type'].nunique()
 
     timepoints = sorted(adata.obs['timepoint'].unique().tolist())
