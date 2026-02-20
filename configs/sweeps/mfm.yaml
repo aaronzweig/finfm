@@ -1,0 +1,19 @@
+method: grid
+
+metric:
+  name: w1_avg
+  goal: minimize
+
+parameters:
+  metric:
+    values: ["mfm"]
+  mfm.K:
+    values: [100, 150, 200]
+  mfm.kappa:
+    values: [1.0, 1.5]
+  mfm.epsilon:
+    values: [5e-2, 1e-1, 2e-1]
+  use_euclidean_ot:
+    values: [true, false]
+  seed:
+    values: [1, 2, 3, 4, 5]

@@ -212,9 +212,13 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
             model.mean = mean
             model.std = std
 
+    if not (config.finsler.use or config.force_train_classifier):
+        config.classifier_max_epochs = 2
+
     if config.metric == "mfm":
-        #TODO: hard-coded?
         metric_model.train_dataloader = singleton_dataloader
+    else:
+        config.metric_max_epochs = 2
 
     if config.no_learning:
         assert config.metric == "cfm" and not config.finsler.use, "you need to learn a metric"
@@ -312,6 +316,17 @@ def train(config, project, wandb_logger=None):
     remove_all_forward_hooks(embed_model)
     remove_all_forward_hooks(flow_model)
 
+    t_val = timepoints[config.t0_index + 1]
+    sample_val = adata[adata.obs['timepoint'] == t_val].obs[config.sample_key].unique().tolist()[0]
+    subset_val = (adata.obs['timepoint'] != t_val) | (adata.obs[config.sample_key] == sample_val)
+    adata_val = adata[subset_val] #only evaluate sample_val at t_val
+    adata = adata[adata.obs[config.sample_key] != sample_val] #exclude sample_val
+    
+    w1_val_scores = []
+    w1 = predict(embed_model, adata_val, t0, t_val, t1, num_traj=6000, library="pot")
+    w1_val_scores.append(w1)
+    w1_val_scores = torch.tensor(w1_val_scores)
+
     w1_scores = []
     for index in range(config.t0_index + 1, config.t1_index):
         t = timepoints[index]
@@ -319,4 +334,4 @@ def train(config, project, wandb_logger=None):
         w1_scores.append(w1)
     w1_scores = torch.tensor(w1_scores)
     
-    return classifier_model, metric_model, embed_model, flow_model, w1_scores
+    return classifier_model, metric_model, embed_model, flow_model, w1_scores, w1_val_scores

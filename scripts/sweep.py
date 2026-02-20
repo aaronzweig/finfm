@@ -29,21 +29,21 @@ def run_trial(dataset, overrides=None):
     wandb.config.update(OmegaConf.to_container(cfg, resolve=True), allow_val_change=True)
 
     wandb_logger = WandbLogger(experiment=run)
-    _, _, _, _, w1_scores = train(cfg, cfg.project, wandb_logger=wandb_logger)
+    _, _, _, _, w1_scores, w1_val_scores = train(cfg, cfg.project, wandb_logger=wandb_logger)
 
-    # Log per-holdout-timepoint W1 scores and the average
-    # for i, score in enumerate(w1_scores):
-    #     wandb.log({f"w1_t{i}": score.item()})
     avg = torch.mean(w1_scores).item()
+    val_avg = torch.mean(w1_val_scores).item()
     wandb.log({"w1_avg": avg})
     wandb.summary["w1_avg"] = avg
+    wandb.log({"w1_val_avg": val_avg})
+    wandb.summary["w1_val_avg"] = val_avg
 
     wandb.finish()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Register a W&B sweep and run the agent.")
-    parser.add_argument("--sweep_config", default="configs/sweep.yaml",
+    parser.add_argument("--sweep_config", default="configs/sweeps/cfm_finsler.yaml",
                         help="Path to the W&B sweep YAML config")
     parser.add_argument("--dataset", default="zebrafish",
                         help="Dataset config to use (e.g. zebrafish, cite)")

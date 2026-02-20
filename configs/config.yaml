@@ -76,6 +76,8 @@ finsler:
   temp: 1.0
   lamb: 1.0
 
+force_train_classifier: False
+
 gaga:
   # Autoencoder settings
   ae_latent_dim: 3

@@ -15,7 +15,7 @@ import scipy.io as sio
 def process_data(pc_dim, t0_index, t1_index, data="zebrafish", 
                  use_paga=False, paga_threshold=0.2, 
                  tissue="Central Nervous System", subset_mouse=True):
-    path = "/home/mingxuanzhang/finfm"
+    path = "data"
     if data == "zebrafish": 
         suffix = "zebra_preprocessed.h5ad"
         filename = os.path.join(path, suffix)
