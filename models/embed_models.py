@@ -167,13 +167,28 @@ class EmbedNetTrainBase(ModelBase):
         paths = self._sample_geodesic(batch, timepoints, ot_sample, weighted)
         return paths[0]
 
+class SBEmbedNetTrainBase(EmbedNetTrainBase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Replace the flow matcher created by the parent with the SB variant.
+        self.flow_matcher = SBMetricFlowMatcher(
+            sigma=self.config.sigma,
+            method=self.config.method,
+            reg=self.config.reg,
+            reg_m=self.config.reg_m,
+            geo_fn=self.geo_fn,
+            cost_matrix_fn=self.cost_matrix_fn,
+        )
+
+
 class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
     def __init__(
         self,
         *args,
         **kwargs,
     ):
-        
+
         super().__init__(*args, **kwargs)
         self.beta = nn.Parameter(torch.randn(self.config.latent_dim//2))
 
@@ -197,3 +212,18 @@ class FinslerEmbedNetTrainBase(EmbedNetTrainBase):
         M = torch.cdist(phi0, phi1)
         M += F.relu(psi0.unsqueeze(1) - psi1.unsqueeze(0))
         return M ** 2
+
+
+class FinslerSBEmbedNetTrainBase(FinslerEmbedNetTrainBase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Replace the flow matcher created by the parent with the SB variant.
+        self.flow_matcher = SBMetricFlowMatcher(
+            sigma=self.config.sigma,
+            method=self.config.method,
+            reg=self.config.reg,
+            reg_m=self.config.reg_m,
+            geo_fn=self.geo_fn,
+            cost_matrix_fn=self.cost_matrix_fn,
+        )

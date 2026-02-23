@@ -288,3 +288,11 @@ class FinslerMFM(FinslerMixin, MetricNetMFM):
 
 class FinslerGAGA(FinslerMixin, MetricNetGAGA):
     pass
+
+
+class MetricNetSBCFM(MetricNetCFM):
+    pass
+
+
+class FinslerSBCFM(FinslerMixin, MetricNetSBCFM):
+    pass

@@ -12,13 +12,16 @@
 
 set -euo pipefail
 
+# Ensure we always run from the project root (parent of this script's directory)
+cd "$(dirname "$0")/.."
+
 # ── defaults ──────────────────────────────────────────────────────────────────
-DATASET="zebrafish"
+DATASET="mouse"
 COUNT_ARG=""
-SWEEP_DIR="configs/sweeps"
+SWEEP_DIR="/home/mingxuanzhang/finfm/configs/sweeps"
 
 # All available configs, in run order
-ALL_SWEEPS=(cfm cfm_finsler mfm mfm_finsler)
+ALL_SWEEPS=(cfm cfm_finsler mfm mfm_finsler sbcfm sbcfm_finsler)
 
 # ── parse flags ───────────────────────────────────────────────────────────────
 POSITIONAL=()

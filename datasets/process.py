@@ -15,7 +15,7 @@ import scipy.io as sio
 def process_data(pc_dim, t0_index, t1_index, data="zebrafish", 
                  use_paga=False, paga_threshold=0.2, 
                  tissue="Central Nervous System", subset_mouse=True):
-    path = "data"
+    path = "/home/mingxuanzhang/finfm"
     if data == "zebrafish": 
         suffix = "zebra_preprocessed.h5ad"
         filename = os.path.join(path, suffix)
@@ -187,7 +187,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
         
         # SUBSET TO TISSUE
         if subset_mouse:
-            adata = adata[adata.obs['cell_type'].isin(BLOOD)].copy()
+            adata = adata[adata.obs['cell_type'].isin(BRAIN)].copy()
             adata.obs['cell_type'] = adata.obs['cell_type'].astype('category').cat.remove_unused_categories()
 
         # PCA
@@ -199,7 +199,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
             print("using paga")
         
         # ROOT IS HARDCODED NOW
-        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="Haematoendothelial progenitors")    
+        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="NMP")    
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     return adata
