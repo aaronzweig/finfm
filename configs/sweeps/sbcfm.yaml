@@ -1,0 +1,17 @@
+method: grid
+
+metric:
+  name: w1_avg
+  goal: minimize
+
+parameters:
+  metric:
+    values: ["sbcfm"]
+  finsler.use:
+    values: [false]
+  sigma:
+    values: [0.1, 0.25]
+  use_euclidean_ot:
+    values: [true]
+  seed:
+    values: [1, 2, 3, 4, 5]

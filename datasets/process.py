@@ -135,13 +135,13 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
                     "Erythroid3"]
         
         BRAIN = [
-                    "Rostral neurectoderm",
-                    "Forebrain/Midbrain/Hindbrain",
-                    "Spinal cord",
-                    "Caudal neurectoderm",
+                    "Caudal epiblast",
                     "NMP",
-                    "Neural crest"
-                    ]
+                    "Caudal neurectoderm",
+                    "Spinal cord",
+                ]
+        
+        
         cache_file = os.path.join(path, "atlas", "mouse_preprocessed.h5ad")
         if os.path.exists(cache_file):
             print("Loading cached preprocessed mouse data...")
