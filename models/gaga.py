@@ -110,19 +110,26 @@ class Autoencoder(ModelBase):
         return torch.optim.Adam(self.parameters(), lr=self.ae_lr, weight_decay=self.ae_weight_decay)
 
 
-# --- Discriminator (standalone pl.LightningModule, operates in latent space) ---
+# --- Discriminator (ModelBase subclass, operates in ambient normalized space) ---
 
-class Discriminator(pl.LightningModule):
+class Discriminator(ModelBase):
+    """On/off-manifold classifier in the ambient (normalized) data space.
+
+    Inherits ModelBase so it shares the same mean/std normalization as the encoder
+    and embed model. forward() accepts normalize=True (for raw data during training)
+    or normalize=False (for pre-normalized data at inference inside MetricNetGAGA._fn).
+    """
     def __init__(
         self,
+        config,
         in_dim,
         layer_widths=None,
-        lr=1e-4,
-        weight_decay=1e-4,
+        disc_lr=1e-4,
+        disc_weight_decay=1e-4,
         dropout=0.5,
         use_spectral_norm=True,
     ):
-        super().__init__()
+        super().__init__(config=config)
         self.mlp = SimpleDenseNet(
             input_dim=in_dim,
             output_dim=2,
@@ -131,20 +138,25 @@ class Discriminator(pl.LightningModule):
             dropout=dropout,
             use_spectral_norm=use_spectral_norm,
         )
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.save_hyperparameters()
+        self.disc_lr = disc_lr
+        self.disc_weight_decay = disc_weight_decay
         self._cache = {"train": [], "val": [], "test": []}
 
-    def forward(self, x):
+    def forward(self, x, normalize=True):
+        if normalize:
+            x = self.normalize(x)
         return self.mlp(x)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        # Simple Adam — no warmup needed for the discriminator
+        return torch.optim.Adam(
+            self.parameters(), lr=self.disc_lr, weight_decay=self.disc_weight_decay
+        )
 
     def _step(self, batch, stage):
         x, y = batch
-        logits = self(x)
+        # Training data is raw X_pca, so normalize=True applies (x - mean) / std
+        logits = self(x, normalize=True)
         loss = F.cross_entropy(logits, y)
         self._cache[stage].append((logits.detach(), y.detach()))
         self.log(f"{stage}_loss", loss, on_epoch=True, prog_bar=True)
@@ -167,14 +179,14 @@ class Discriminator(pl.LightningModule):
     def on_train_epoch_end(self):
         self._epoch_end("train")
 
-    def positive_prob(self, x):
-        return F.softmax(self(x), dim=1)[:, 1]
+    def positive_prob(self, x, normalize=True):
+        return F.softmax(self(x, normalize=normalize), dim=1)[:, 1]
 
-    def positive_score(self, x):
-        return self(x)[:, 1]
+    def positive_score(self, x, normalize=True):
+        return self(x, normalize=normalize)[:, 1]
 
-    def negative_score(self, x):
-        return self(x)[:, 0]
+    def negative_score(self, x, normalize=True):
+        return self(x, normalize=normalize)[:, 0]
 
 
 # --- Negative sampling utilities ---

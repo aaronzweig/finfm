@@ -1,8 +1,0 @@
-# @package _global_
-project: "mouse"
-dataset: "mouse"
-pc_dim: 100
-tissue: ""
-t0_index: 1
-t1_index: 7
-sample_key: "sample"

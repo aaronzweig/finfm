@@ -1,6 +1,7 @@
 # @package _global_
-project: "zebrafish"
-dataset: "zebrafish"
+project: "zebrafish_cns"
+dataset: "zebrafish_cns"
+data: "zebrafish"
 pc_dim: 100
 tissue: "Central Nervous System"
 t0_index: 1

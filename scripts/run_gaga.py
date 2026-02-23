@@ -15,7 +15,6 @@ from models.gaga import (
     make_custom_collate_fn,
     neg_sample_additive,
     sampling_rejection,
-    encode_data,
 )
 from models.metric_models import MetricNetGAGA, FinslerGAGA
 from models.embed_models import EmbedNetTrainBase
@@ -65,9 +64,14 @@ def build_autoencoder(config, dist_std):
 
 def train_autoencoder(config, ae_model, ae_dataloader, wandb_logger=None):
     """Train the autoencoder on point cloud data with distance preservation."""
-    logger = wandb_logger if wandb_logger is not None else (
-        WandbLogger(project="gaga", name="autoencoder") if config.use_wandb else False
-    )
+    # When an external logger is provided (sweep mode) don't reuse it here — each pl.Trainer
+    # resets its global_step to 0, causing step-number collisions in the wandb dashboard.
+    if wandb_logger is not None:
+        logger = False
+    elif config.use_wandb:
+        logger = WandbLogger(project="gaga", name="autoencoder")
+    else:
+        logger = False
     trainer = pl.Trainer(
         max_epochs=config.gaga.ae_max_epochs,
         log_every_n_steps=1,
@@ -84,20 +88,21 @@ def train_autoencoder(config, ae_model, ae_dataloader, wandb_logger=None):
 # --- Phase 2: Discriminator ---
 
 def build_and_train_discriminator(config, ae_model, X_pca, wandb_logger=None):
-    """Encode data, generate negatives, and train discriminator."""
-    device = "cpu" if config.force_cpu else "cuda"
+    """Generate ambient-space negatives and train discriminator on raw X_pca.
 
-    # Encode training data through frozen autoencoder
-    encodings = encode_data(X_pca, ae_model, device)
-
-    # Generate negative samples (off-manifold)
+    The discriminator (a ModelBase subclass) normalizes internally, so we feed it raw
+    X_pca during training.  At inference inside MetricNetGAGA._fn, x is already
+    normalized and the discriminator is called with normalize=False.
+    Negatives are generated in raw ambient space to match the X_pca scale.
+    """
+    # Generate negative samples (off-manifold) in raw ambient space
     noise_levels = list(config.gaga.noise_levels)
-    negatives = neg_sample_additive(encodings, noise_levels, seed=config.seed)
+    negatives = neg_sample_additive(X_pca, noise_levels, seed=config.seed)
 
     # Optional rejection sampling
     if config.gaga.sampling_rejection:
         rejected_mask = sampling_rejection(
-            encodings,
+            X_pca,
             negatives,
             method=config.gaga.sampling_rejection_method,
             k=config.gaga.sampling_rejection_k,
@@ -105,8 +110,8 @@ def build_and_train_discriminator(config, ae_model, X_pca, wandb_logger=None):
         )
         negatives = negatives[~rejected_mask]
 
-    # Build discriminator dataloader
-    pos = torch.tensor(encodings, dtype=torch.float32)
+    # Build discriminator dataloader (raw X_pca; discriminator normalizes internally)
+    pos = torch.tensor(X_pca, dtype=torch.float32)
     neg = torch.tensor(negatives, dtype=torch.float32)
     X = torch.cat([pos, neg], dim=0)
     Y = torch.cat([
@@ -119,19 +124,27 @@ def build_and_train_discriminator(config, ae_model, X_pca, wandb_logger=None):
         shuffle=True,
     )
 
-    # Build and train discriminator
+    # Discriminator input dim = ambient pc_dim (not latent dim)
     disc_model = Discriminator(
-        in_dim=config.gaga.ae_latent_dim,
+        config=config,
+        in_dim=config.pc_dim,
         layer_widths=config.gaga.disc_hidden_dims,
-        lr=config.gaga.disc_lr,
-        weight_decay=config.gaga.disc_weight_decay,
+        disc_lr=config.gaga.disc_lr,
+        disc_weight_decay=config.gaga.disc_weight_decay,
         dropout=config.gaga.disc_dropout,
         use_spectral_norm=config.gaga.disc_use_spectral_norm,
     )
+    # Share normalization with AE so disc sees the same normalized space at inference
+    disc_model.mean = ae_model.mean
+    disc_model.std = ae_model.std
 
-    logger = wandb_logger if wandb_logger is not None else (
-        WandbLogger(project="gaga", name="discriminator") if config.use_wandb else False
-    )
+    # Same logger fix as train_autoencoder: avoid step-counter collisions in sweep mode
+    if wandb_logger is not None:
+        logger = False
+    elif config.use_wandb:
+        logger = WandbLogger(project="gaga", name="discriminator")
+    else:
+        logger = False
     trainer = pl.Trainer(
         max_epochs=config.gaga.disc_max_epochs,
         log_every_n_steps=1,
@@ -166,7 +179,6 @@ def run_gaga_model(config, project, adata_train, timepoints, tree, wandb_logger=
 
     X_pca = adata_train.obsm['X_pca']
 
-    #TODO: PHATE
     distances = calculate_distances(adata_train.obsm['X_pca'])
 
     # Phase 0: Compute normalization stats (ModelBase-style)
@@ -178,7 +190,10 @@ def run_gaga_model(config, project, adata_train, timepoints, tree, wandb_logger=
     if issparse(distances):
         distances = distances.toarray()
     distances = np.asarray(distances, dtype=np.float32)
-    dist_std = np.std(distances.flatten())
+    # Use only upper-triangular (off-diagonal) values — squareform includes n zeros on
+    # the diagonal that would deflate the std and over-scale the normalized distances.
+    n = len(distances)
+    dist_std = np.std(distances[np.triu_indices(n, k=1)])
 
     # Phase 1: Autoencoder
     print("Phase 1: Training autoencoder...")

@@ -279,14 +279,15 @@ def remove_all_forward_hooks(model):
 
 def train(config, project, wandb_logger=None):
 
-    random.seed(config.seed)
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    if config.seeded:
+        random.seed(config.seed)
+        np.random.seed(config.seed)
+        torch.manual_seed(config.seed)
 
     adata = process_data(pc_dim=config.pc_dim, 
                          t0_index=config.t0_index, 
                          t1_index=config.t1_index, 
-                         data=config.dataset, 
+                         data=config.data, 
                          use_paga=config.use_paga, 
                          paga_threshold=config.paga_threshold,
                          tissue=config.tissue)
