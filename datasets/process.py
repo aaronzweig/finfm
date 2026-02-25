@@ -187,7 +187,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
         
         # SUBSET TO TISSUE
         if subset_mouse:
-            adata = adata[adata.obs['cell_type'].isin(BRAIN)].copy()
+            adata = adata[adata.obs['cell_type'].isin(BLOOD)].copy()
             adata.obs['cell_type'] = adata.obs['cell_type'].astype('category').cat.remove_unused_categories()
 
         # PCA
@@ -199,7 +199,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
             print("using paga")
         
         # ROOT IS HARDCODED NOW
-        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="NMP")    
+        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="Haematoendothelial progenitors")    
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     return adata
