@@ -157,7 +157,7 @@ def incorporate_tree(adata, adj, cell_type_key):
     # cell_types = list(set(cell_types + tree_cell_types))
 
     tree_cell_types = list(adj.keys()) + list(itertools.chain(*adj.values()))
-    tree_cell_types = list(set(tree_cell_types))
+    tree_cell_types = sorted(set(tree_cell_types))  # sort for deterministic stoi/itos ordering
     adata = adata[adata.obs[cell_type_key].isin(tree_cell_types)]
     cell_types = tree_cell_types
 

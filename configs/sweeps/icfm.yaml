@@ -11,5 +11,7 @@ parameters:
     values: [false]
   use_euclidean_ot:
     values: [true]
+  force_icfm:
+    values: [true]
   seed:
-    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    values: [1, 2, 3, 4, 5]

@@ -324,14 +324,14 @@ def train(config, project, wandb_logger=None):
     adata = adata[adata.obs[config.sample_key] != sample_val] #exclude sample_val
     
     w1_val_scores = []
-    w1 = predict(embed_model, adata_val, t0, t_val, t1, num_traj=6000, library="pot")
+    w1 = predict(embed_model, adata_val, t0, t_val, t1, num_traj=6000, library="pot", icfm=config.force_icfm)
     w1_val_scores.append(w1)
     w1_val_scores = torch.tensor(w1_val_scores)
 
     w1_scores = []
     for index in range(config.t0_index + 1, config.t1_index):
         t = timepoints[index]
-        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="pot")
+        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="pot", icfm=config.force_icfm)
         w1_scores.append(w1)
     w1_scores = torch.tensor(w1_scores)
     
