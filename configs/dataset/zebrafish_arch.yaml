@@ -8,4 +8,4 @@ t0_index: 1
 t1_index: 4
 sample_key: "embryo"
 use_paga: true
-paga_threshold: 0.2
+paga_threshold: 0.85

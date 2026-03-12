@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # ── defaults ──────────────────────────────────────────────────────────────────
-DATASET="zebrafish"
+DATASET="zebrafish_cns"
 COUNT_ARG=""
 SWEEP_DIR="configs/sweeps"
 

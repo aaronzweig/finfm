@@ -8,4 +8,4 @@ t0_index: 1
 t1_index: 7
 sample_key: "sample"
 use_paga: True
-paga_threshold: 0.0
+paga_threshold: 0.1

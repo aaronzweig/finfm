@@ -83,6 +83,7 @@ from collections import deque
 def enforce_dag_from_root(adata, root_cell_type, groups='cell_type', threshold=0.0):
 
     connectivity = adata.uns['paga']['connectivities'].toarray()
+    connectivity = (connectivity > threshold).astype(int)
     n_nodes = connectivity.shape[0]
     
     categories = adata.obs[groups].cat.categories
@@ -104,7 +105,7 @@ def enforce_dag_from_root(adata, root_cell_type, groups='cell_type', threshold=0
         current = queue.popleft()
         current_level = levels[current]
         
-        neighbors = np.where(connectivity[current] > threshold)[0]
+        neighbors = np.where(connectivity[current] > 0)[0]
         
         for neighbor in neighbors:
             if levels[neighbor] == -1:  # Unvisited
@@ -114,9 +115,9 @@ def enforce_dag_from_root(adata, root_cell_type, groups='cell_type', threshold=0
     for i in range(n_nodes):
         for j in range(n_nodes):
             if connectivity[i, j] > 0:  # There's an edge
-                if levels[i] < levels[j]:  # i -> j (forward)
+                if levels[i] <= levels[j]:  # i -> j (forward)
                     directed_connectivity[i, j] = connectivity[i, j]
-                elif levels[i] > levels[j]:  # j -> i (reverse)
+                elif levels[i] >= levels[j]:  # j -> i (reverse)
                     directed_connectivity[j, i] = connectivity[i, j]
     
     adata.uns['paga']['connectivities_dag'] = csr_matrix(directed_connectivity)
@@ -132,7 +133,7 @@ def run_paga_tree(adata, cell_type_key, threshold=0.2, root_node=""):
     directed_conn, _ = enforce_dag_from_root(
     adata, 
     root_cell_type=root_node,
-    groups='cell_type',
+    groups=cell_type_key,
     threshold=threshold
     )
               

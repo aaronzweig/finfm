@@ -59,6 +59,8 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
         subset = adata.obs['tissue'] == tissue
         adata = adata[subset]
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
+        if tissue == "Blood":
+            adata.obs['cell_type'] = adata.obs['cell_type_broad']
         sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
 
         if tissue == "Central Nervous System" and not use_paga:
@@ -75,11 +77,14 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
                             ]
             arch_root_nodes = ['cranial muscle (progenitor)',
                                'head mesenchyme (maybe ventral, hand2+)']
+            blood_root_nodes = []
             root_node = ""
             if tissue == "Central Nervous System":
                 root_node = cns_root_nodes
             elif tissue == "Pharyngeal Arch":
                 root_node = arch_root_nodes
+            elif tissue == "Blood":
+                root_node = blood_root_nodes
             adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node=root_node)
         adata = incorporate_tree(adata, adj, 'cell_type')
 
