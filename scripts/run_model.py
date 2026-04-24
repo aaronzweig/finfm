@@ -292,14 +292,15 @@ def remove_all_forward_hooks(model):
 
 def train(config, project, wandb_logger=None):
 
-    random.seed(config.seed)
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    if config.seeded:
+        random.seed(config.seed)
+        np.random.seed(config.seed)
+        torch.manual_seed(config.seed)
 
     adata = process_data(pc_dim=config.pc_dim, 
                          t0_index=config.t0_index, 
                          t1_index=config.t1_index, 
-                         data=config.dataset, 
+                         data=config.data, 
                          use_paga=config.use_paga, 
                          paga_threshold=config.paga_threshold,
                          tissue=config.tissue)
@@ -336,14 +337,14 @@ def train(config, project, wandb_logger=None):
     adata = adata[adata.obs[config.sample_key] != sample_val] #exclude sample_val
     
     w1_val_scores = []
-    w1 = predict(embed_model, adata_val, t0, t_val, t1, num_traj=6000, library="pot")
+    w1 = predict(embed_model, adata_val, t0, t_val, t1, num_traj=6000, library="pot", icfm=config.force_icfm)
     w1_val_scores.append(w1)
     w1_val_scores = torch.tensor(w1_val_scores)
 
     w1_scores = []
     for index in range(config.t0_index + 1, config.t1_index):
         t = timepoints[index]
-        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="pot")
+        w1 = predict(embed_model, adata, t0, t, t1, num_traj=6000, library="pot", icfm=config.force_icfm)
         w1_scores.append(w1)
     w1_scores = torch.tensor(w1_scores)
     

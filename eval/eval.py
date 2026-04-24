@@ -48,7 +48,7 @@ def pot_ot_dist(X, Y, a = None, b = None, p = 1):
     # dist = ot.sinkhorn2(a, b, M, ot_epsilon, method='sinkhorn_log') ** (1/p)
     return dist
 
-def predict(embed_model, adata, t0, t, t1, p=1, num_traj=2000, batch_size=500, library="geomloss"):
+def predict(embed_model, adata, t0, t, t1, p=1, num_traj=2000, batch_size=500, library="geomloss", icfm=False):
 
     adata_obs = adata[adata.obs['timepoint'].isin([t0, t1])]
 
@@ -62,7 +62,7 @@ def predict(embed_model, adata, t0, t, t1, p=1, num_traj=2000, batch_size=500, l
     total = 0
     while total < num_traj // batch_size:
         batch = next(iter(train_dataloader))
-        x, w = embed_model.sample_geodesic_time(batch, t, weighted=True)
+        x, w = embed_model.sample_geodesic_time(batch, t, weighted=True, ot_sample=not icfm)
         samples.append(x)
         weights.append(w)
         total += 1

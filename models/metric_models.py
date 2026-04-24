@@ -135,10 +135,12 @@ class MetricNetGAGA(MetricNetTrainBase):
         self.disc_factor = disc_factor
 
     def _fn(self, x):
-        # x is already ModelBase-normalized; encoder shares the same normalization
+        # x is already ModelBase-normalized (done by embed model's _prepare_batch).
+        # Metric pullback of [f(x), β·s(x)] where f=encoder, s=off-manifold probability.
+        # Both f and s operate on the same ambient (normalized) x.
         z = self.encoder(x, normalize=False)
-        penalty = torch.exp(self.disc_factor * (1 - self.discriminator.positive_prob(z)))
-        return torch.cat([z, penalty.unsqueeze(1)], dim=1)
+        s = 1 - self.discriminator.positive_prob(x, normalize=False)  # ≈0 on-manifold, ≈1 off-manifold
+        return torch.cat([z, self.disc_factor * s.unsqueeze(1)], dim=1)
 
     def forward(self, x, v):
         f_x, Jf_x_v = jvp(self._fn, (x,), (v,))

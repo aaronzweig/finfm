@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # ── defaults ──────────────────────────────────────────────────────────────────
-DATASET="mouse"
+DATASET="zebrafish_cns"
 COUNT_ARG=""
 SWEEP_DIR="/home/mingxuanzhang/finfm/configs/sweeps"
 

@@ -14,8 +14,8 @@ import scipy.io as sio
 
 def process_data(pc_dim, t0_index, t1_index, data="zebrafish", 
                  use_paga=False, paga_threshold=0.2, 
-                 tissue="Central Nervous System", subset_mouse=True):
-    path = "/home/mingxuanzhang/finfm"
+                 tissue="Central Nervous System"):
+    path = "data"
     if data == "zebrafish": 
         suffix = "zebra_preprocessed.h5ad"
         filename = os.path.join(path, suffix)
@@ -59,19 +59,9 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
         subset = adata.obs['tissue'] == tissue
         adata = adata[subset]
         adata.obs['cell_type'] = adata.obs['cell_type_broad']
+        if tissue == "Blood":
+            adata.obs['cell_type'] = adata.obs['cell_type_broad']
         sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
-
-        # Fit PCA on t0/t1 subset, apply transform to all data
-        # timepoints = sorted(adata.obs['timepoint'].unique().tolist())
-        # t0, t1 = timepoints[t0_index], timepoints[t1_index]
-        # subset = adata[adata.obs['timepoint'].isin([t0, t1])].copy()
-        # sc.tl.pca(subset, n_comps=pc_dim, mask_var=None)
-
-        # mean = np.mean(subset.X, axis=0)
-        # PCs = subset.varm['PCs']
-        # adata.obsm['X_pca'] = (adata.X - mean) @ PCs
-        # adata.varm['PCs'] = PCs
-        # adata.uns['pca'] = subset.uns['pca']
 
         if tissue == "Central Nervous System" and not use_paga:
             adj = ZEBRAFISH_NEURAL_ADJACENCY
@@ -87,11 +77,14 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
                             ]
             arch_root_nodes = ['cranial muscle (progenitor)',
                                'head mesenchyme (maybe ventral, hand2+)']
+            blood_root_nodes = []
             root_node = ""
             if tissue == "Central Nervous System":
                 root_node = cns_root_nodes
             elif tissue == "Pharyngeal Arch":
                 root_node = arch_root_nodes
+            elif tissue == "Blood":
+                root_node = blood_root_nodes
             adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node=root_node)
         adata = incorporate_tree(adata, adj, 'cell_type')
 
@@ -104,28 +97,6 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
 
         adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
 
-        #TODO: the wrong donor!???? But we downloaded it from https://data.mendeley.com/datasets/hhny5ff7yj/1
-
-    # elif data == "celegans":
-    #     suffix = "celegans.h5ad"
-    #     filename = os.path.join(path, suffix)
-    #     adata = sc.read(filename)
-    #     adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
-    #     dic = {'300_minutes': 300, '400_minutes': 400, '500_minutes': 500}
-    #     adata.obs['timepoint'] = [dic[x] for x in adata.obs['time_point'].tolist()]
-    #     sc.tl.pca(adata, n_comps = pc_dim)
-
-    #     adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, use_tree=True)
-    #     adata = incorporate_tree(adata, adj, 'cell_type')
-
-    # elif data == "cite_gaga":
-    #     filename = "/home/azweig/projects/finfm/benchmark/flow_matching_minimal/data/cite_100.h5ad"
-    #     adata = sc.read(filename)
-    #     adata.obs['gene_target'] = ['ctrl-inj'] * adata.shape[0]
-    #     adata.obs['timepoint'] = adata.obs['day']
-
-    #     adata = incorporate_tree(adata, CITE_ADJACENCY, 'cell_type')
-
     elif data == "mouse":
         BLOOD = [ "Blood progenitors 1",
                    "Blood progenitors 2",
@@ -135,13 +106,11 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
                     "Erythroid3"]
         
         BRAIN = [
+                    "Spinal cord",
+                    "Caudal neurectoderm",
                     "Caudal epiblast",
                     "NMP",
-                    "Caudal neurectoderm",
-                    "Spinal cord",
-                ]
-        
-        
+                    ]
         cache_file = os.path.join(path, "atlas", "mouse_preprocessed.h5ad")
         if os.path.exists(cache_file):
             print("Loading cached preprocessed mouse data...")
@@ -186,9 +155,17 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
         adata.obs['timepoint'] = adata.obs['stage'].map(stage_to_num).astype(float)
         
         # SUBSET TO TISSUE
-        if subset_mouse:
-            adata = adata[adata.obs['cell_type'].isin(BLOOD)].copy()
-            adata.obs['cell_type'] = adata.obs['cell_type'].astype('category').cat.remove_unused_categories()
+        if tissue == "brain":
+            cell_list = BRAIN
+            root_node = ["NMP", "Caudal epiblast"]
+        elif tissue == "blood":
+            cell_list = BLOOD
+            root_node ="Haematoendothelial progenitors"
+        else:
+            cell_list = None
+            root_node = None
+        adata = adata[adata.obs['cell_type'].isin(cell_list)].copy()
+        adata.obs['cell_type'] = adata.obs['cell_type'].astype('category').cat.remove_unused_categories()
 
         # PCA
         sc.tl.pca(adata, n_comps=pc_dim, mask_var=None)
@@ -198,8 +175,7 @@ def process_data(pc_dim, t0_index, t1_index, data="zebrafish",
         if use_paga:
             print("using paga")
         
-        # ROOT IS HARDCODED NOW
-        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node="Haematoendothelial progenitors")    
+        adj = run_paga_tree(adata, 'cell_type', threshold=paga_threshold, root_node=root_node)    
         adata = incorporate_tree(adata, adj, 'cell_type')
 
     return adata

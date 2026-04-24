@@ -1,10 +1,11 @@
 defaults:
   - _self_
-  - dataset: "zebrafish"
+  - dataset: "zebrafish_cns"
 
 pc_dim: -1
 num_classes: -1
 
+seeded: true
 seed: 42
 
 # Trainer settings
@@ -60,6 +61,8 @@ no_learning: False
 time_per_batch: 4
 random_velocities: False
 
+force_icfm: False
+
 method: "exact"
 reg: -1
 reg_m: -1
@@ -69,7 +72,8 @@ mfm:
   kappa: 1.5
   alpha: 1.0
   epsilon: 1e-1
-  use_euclidean_ot: False
+
+use_euclidean_ot: False
 
 finsler:
   use: False
@@ -77,34 +81,3 @@ finsler:
   lamb: 1.0
 
 force_train_classifier: False
-
-gaga:
-  # Autoencoder settings
-  ae_latent_dim: 3
-  ae_hidden_dims: [256, 128, 64]
-  ae_dropout: 0.2
-  ae_use_spectral_norm: false
-  ae_dist_mse_decay: 0.0
-  ae_weights_dist: 77.4
-  ae_lr: 1e-3
-  ae_weight_decay: 1e-5
-  ae_max_epochs: 100
-  ae_batch_size: 32
-  distance_key: "dist"
-
-  # Discriminator settings
-  disc_hidden_dims: [256, 128, 64]
-  disc_lr: 1e-3
-  disc_weight_decay: 1e-4
-  disc_max_epochs: 100
-  disc_batch_size: 128
-  disc_dropout: 0.5
-  disc_use_spectral_norm: true
-  disc_factor: 5.0
-
-  # Negative sampling
-  noise_levels: [0.5, 1.0]
-  sampling_rejection: false
-  sampling_rejection_method: "sugar"
-  sampling_rejection_k: 20
-  sampling_rejection_threshold: 0.2

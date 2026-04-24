@@ -40,7 +40,7 @@ class EmbedNetTrainBase(ModelBase):
                                               cost_matrix_fn = self.cost_matrix_fn)
         
     def embed_fn(self, x):
-            if self.config.no_learning or self.config.mfm.use_euclidean_ot:
+            if self.config.no_learning or self.config.use_euclidean_ot:
                 return x
             return self.embed_net(x)
     
