@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torchcfm.optimal_transport import OTPlanSampler
-from torchcfm.conditional_flow_matching import pad_t_like_x, ConditionalFlowMatcher
+from torchcfm.conditional_flow_matching import pad_t_like_x, ConditionalFlowMatcher, SchrodingerBridgeConditionalFlowMatcher
 from torch.func import jvp
 from utils.frozen import *
 from models.ot_sampler import GeneralOTPlanSampler
@@ -206,3 +206,24 @@ class MetricFlowMatcher(OTFlowMatcher):
         return (t_max - t) / (t_max - t_min) * r0 + (t - t_min) / (
             t_max - t_min
         ) * r1
+
+
+############################################################################################################################
+
+class SBMetricFlowMatcher(MetricFlowMatcher):
+    """Schrödinger Bridge variant of MetricFlowMatcher.
+    """
+
+    def compute_xt_and_conditional_flow(self, x0, x1, t, eps, t_min, t_max):
+        t = pad_t_like_x(t, x0)
+
+        def f(tt):
+            t_padded = pad_t_like_x(tt, x0)
+            s = (t_padded - t_min) / (t_max - t_min)
+            mu_t = (1 - s) * x0 + s * x1
+            sigma_t = self.sigma * torch.sqrt(s * (1 - s) + 1e-8)
+            return mu_t + sigma_t * eps
+
+        xt, ut = jvp(f, (t,), (torch.ones_like(t),))
+        return xt, ut.squeeze(-1)
+

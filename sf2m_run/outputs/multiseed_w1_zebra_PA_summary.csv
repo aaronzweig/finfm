@@ -1,0 +1,7 @@
+row_type,seed,run_dir,num_heldout_timepoints,mean_w1_across_heldout,mean_w1_across_runs,std_w1_across_runs,n_runs
+run,1,sf2m_run/outputs/multiseed/seed_1,2,13.384577445157502,,,
+run,2,sf2m_run/outputs/multiseed/seed_2,2,13.515382387931142,,,
+run,3,sf2m_run/outputs/multiseed/seed_3,2,13.285613861932282,,,
+run,4,sf2m_run/outputs/multiseed/seed_4,2,13.285223266846904,,,
+run,5,sf2m_run/outputs/multiseed/seed_5,2,13.454388380673347,,,
+summary,,,,,13.385037068508236,0.10203857978240295,5

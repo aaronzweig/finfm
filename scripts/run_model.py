@@ -70,9 +70,20 @@ def build_metric(config, tree, classifier_model):
                                       alpha=config.mfm.alpha,
                                       epsilon=config.mfm.epsilon,
                                       )
+    elif config.metric == "sbcfm":
+        if not config.finsler.use:
+            metric_model = MetricNetSBCFM(config=config)
+        else:
+            metric_model = FinslerSBCFM(config=config,
+                                        classifier_model=classifier_model,
+                                        tree=torch.from_numpy(tree).float(),
+                                        temp=config.finsler.temp,
+                                        lamb=config.finsler.lamb,
+                                        )
+
     elif config.metric == "gaga":
         pass
-    
+
     else:
         raise NotImplementedError(f"Metric model {config.metric} not implemented.")
 
@@ -96,20 +107,22 @@ def build_embed(config, timepoints, metric_model):
 
     t_global_min, t_global_max = min(timepoints), max(timepoints)
     
-    if config.finsler.use:
-        embed_model = FinslerEmbedNetTrainBase(metric_model=metric_model,
-                                               geo_net=geo_net,
-                                               embed_net=embed_net,
-                                               config=config,
-                                               t_global_min=t_global_min,
-                                               t_global_max=t_global_max)
+    common_kwargs = dict(metric_model=metric_model,
+                         geo_net=geo_net,
+                         embed_net=embed_net,
+                         config=config,
+                         t_global_min=t_global_min,
+                         t_global_max=t_global_max)
+
+    if config.metric == "sbcfm":
+        if config.finsler.use:
+            embed_model = FinslerSBEmbedNetTrainBase(**common_kwargs)
+        else:
+            embed_model = SBEmbedNetTrainBase(**common_kwargs)
+    elif config.finsler.use:
+        embed_model = FinslerEmbedNetTrainBase(**common_kwargs)
     else:
-        embed_model = EmbedNetTrainBase(metric_model=metric_model,
-                                    geo_net=geo_net,
-                                    embed_net=embed_net,
-                                    config=config,
-                                    t_global_min=t_global_min,
-                                    t_global_max=t_global_max)
+        embed_model = EmbedNetTrainBase(**common_kwargs)
 
     return embed_model
 
@@ -221,7 +234,7 @@ def run_full_model(config, project, singleton_dataloader, paired_dataloader, tim
         config.metric_max_epochs = 2
 
     if config.no_learning:
-        assert config.metric == "cfm" and not config.finsler.use, "you need to learn a metric"
+        assert config.metric in ("cfm", "sbcfm") and not config.finsler.use, "you need to learn a metric"
         return classifier_model, metric_model, embed_model, flow_model
 
     # phase_list =  ['classifier', 'metric', 'embed', 'flow']
