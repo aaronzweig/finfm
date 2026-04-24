@@ -108,7 +108,7 @@ def main():
         choices=["none", "blood", "brain"],
         help="Optional mouse subset to pass through to run_sf2m.py.",
     )
-    p.add_argument("--seeds", default="1,2,3,4,5")
+    p.add_argument("--seeds", default="1,2,3,4,5,6,7,8,9,10")
     p.add_argument("--base_save_dir", default="sf2m_run/outputs/multiseed")
     p.add_argument("--summary_csv", default="sf2m_run/outputs/multiseed_w1_summary.csv")
     p.add_argument("--skip_existing", action="store_true")
